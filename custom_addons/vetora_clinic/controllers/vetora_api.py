@@ -1,11 +1,29 @@
 import logging
 from datetime import datetime, timedelta
 
+import pytz
 from odoo import http, fields
 from odoo.http import request
 from odoo.exceptions import ValidationError, AccessError
 
 _logger = logging.getLogger(__name__)
+
+
+def _start_at_local_to_utc(start_at_str, tz_name):
+    """Interpret start_at string as naive datetime in the given timezone; return UTC string for Odoo.
+    Frontend sends local time (browser); we treat it as location time so schedule validation matches.
+    """
+    if not start_at_str or not tz_name:
+        return start_at_str
+    try:
+        tz = pytz.timezone(tz_name)
+        dt_naive = datetime.strptime(start_at_str.strip()[:19], "%Y-%m-%d %H:%M:%S")
+        local_aware = tz.localize(dt_naive)
+        utc_aware = local_aware.astimezone(pytz.UTC)
+        return utc_aware.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, pytz.exceptions.UnknownTimeZoneError) as e:
+        _logger.warning("start_at timezone conversion failed: %s", e)
+        return start_at_str
 
 
 def _json_ok(data):
@@ -837,16 +855,28 @@ class VetoraApiController(http.Controller):
                     {"fields": missing},
                 )
 
+            loc_id = payload["location_id"]
+            location = env["vet.location"].sudo().browse(loc_id)
+            if not location.exists():
+                return _json_error(
+                    "INVALID_LOCATION",
+                    "Location is required and must exist.",
+                    {"location_id": loc_id},
+                )
+
+            tz_name = location.tz or getattr(env.company, "tz", None) or "UTC"
+            start_at_utc = _start_at_local_to_utc(payload["start_at"], tz_name)
+
             vals = {
                 "pet_id": payload["pet_id"],
                 "doctor_id": payload["doctor_id"],
                 "service_id": payload["service_id"],
-                "start_at": payload["start_at"],
+                "start_at": start_at_utc,
                 "duration_minutes": payload["duration_minutes"],
                 "source": payload["source"],
                 "is_urgent": payload.get("is_urgent", False),
                 "notes": payload.get("notes", ""),
-                "location_id": payload["location_id"],
+                "location_id": loc_id,
                 "company_id": payload.get("company_id") or env.company.id,
             }
 
