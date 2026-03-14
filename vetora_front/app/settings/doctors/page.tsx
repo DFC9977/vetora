@@ -51,7 +51,7 @@ export default function DoctorsSettingsPage() {
     void load();
   }, []);
 
-  async function load() {
+  async function load(keepSelectedId?: number | null) {
     setLoading(true);
     setError(null);
     const [dRes, sRes] = await Promise.all([
@@ -65,7 +65,9 @@ export default function DoctorsSettingsPage() {
     } else {
       const list = Array.isArray(dRes.data?.doctors) ? dRes.data.doctors : [];
       setDoctors(list);
-      if (!selectedId && list.length > 0) {
+      if (keepSelectedId !== undefined) {
+        setSelectedId(keepSelectedId);
+      } else if (!selectedId && list.length > 0) {
         setSelectedId(list[0].id);
       }
     }
@@ -76,6 +78,8 @@ export default function DoctorsSettingsPage() {
     const list = doctors ?? [];
     const doc = list.find((d) => d.id === selectedId);
     if (!doc) {
+      // selectedId is null → "new" mode; reset form but preserve formDirty
+      // so the Save button stays visible if the user already started typing.
       setForm({
         name: "",
         short_name: "",
@@ -85,7 +89,6 @@ export default function DoctorsSettingsPage() {
         service_ids: [],
         schedules: [],
       });
-      setFormDirty(false);
       return;
     }
     setForm({
@@ -167,15 +170,8 @@ export default function DoctorsSettingsPage() {
     }
     setSuccess("Doctor saved.");
     setFormDirty(false);
-    if (res.data.doctor) {
-      const saved = res.data.doctor;
-      setSelectedId(saved.id);
-      setDoctors((prev) => {
-        const without = prev.filter((d) => d.id !== saved.id);
-        return [...without, saved];
-      });
-    }
-    void load();
+    const savedId = res.data.doctor?.id ?? null;
+    void load(savedId);
   }
 
   function createNew() {
