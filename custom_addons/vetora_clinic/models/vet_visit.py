@@ -26,6 +26,7 @@ class VetVisit(models.Model):
         ("online", "Online"),
         ("walk_in", "Walk-in"),
         ("internal", "Internal"),
+        ("manual", "Manual"),
     ]
 
     name = fields.Char(
