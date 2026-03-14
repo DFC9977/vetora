@@ -39,7 +39,7 @@ export default function ServicesSettingsPage() {
     void load();
   }, []);
 
-  async function load() {
+  async function load(keepSelectedId?: number | null) {
     setLoading(true);
     setError(null);
     const [sRes, dRes] = await Promise.all([
@@ -53,7 +53,9 @@ export default function ServicesSettingsPage() {
     } else {
       const list = Array.isArray(sRes.data?.services) ? sRes.data.services : [];
       setServices(list);
-      if (!selectedId && list.length > 0) {
+      if (keepSelectedId !== undefined) {
+        setSelectedId(keepSelectedId);
+      } else if (!selectedId && list.length > 0) {
         setSelectedId(list[0].id);
       }
     }
@@ -63,6 +65,8 @@ export default function ServicesSettingsPage() {
   useEffect(() => {
     const svc = services.find((s) => s.id === selectedId);
     if (!svc) {
+      // selectedId is null → "new" mode; reset form but preserve formDirty
+      // so the Save button stays visible if the user already started typing.
       setForm({
         name: "",
         category: "",
@@ -72,7 +76,6 @@ export default function ServicesSettingsPage() {
         active: true,
         eligible_doctor_ids: [],
       });
-      setFormDirty(false);
       return;
     }
     setForm({
@@ -124,16 +127,8 @@ export default function ServicesSettingsPage() {
     }
     setSuccess(t("settingsServices.saveSuccess"));
     setFormDirty(false);
-    if (res.data.service) {
-      const saved = res.data.service;
-      setSelectedId(saved.id);
-      setServices((prev) => {
-        const arr = Array.isArray(prev) ? prev : [];
-        const without = arr.filter((s) => s.id !== saved.id);
-        return [...without, saved];
-      });
-    }
-    void load();
+    const savedId = res.data.service?.id ?? null;
+    void load(savedId);
   }
 
   function createNew() {
