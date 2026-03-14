@@ -207,8 +207,9 @@ class VetoraApiController(http.Controller):
     # --- Calendar helpers ---
 
     @http.route("/vetora/json/calendar/day", type="json", auth="user", methods=["POST"])
-    def calendar_day(self, **payload):
+    def calendar_day(self, **kwargs):
         """Return calendar data for a single day."""
+        payload = {**_json_payload(), **kwargs}
         try:
             env = request.env
             date_str = payload.get("date")
@@ -218,9 +219,16 @@ class VetoraApiController(http.Controller):
             day = fields.Date.from_string(date_str)
             company_id = payload.get("company_id") or env.company.id
             location_id = payload.get("location_id")
-            doctor_ids = payload.get("doctor_ids") or []
+            raw_doctor_ids = payload.get("doctor_ids") or []
+            doctor_ids = []
+            for x in raw_doctor_ids:
+                try:
+                    if x is not None:
+                        doctor_ids.append(int(x))
+                except (TypeError, ValueError):
+                    pass
 
-            # compute datetime range [day_start, day_end)
+            # Datetime range [day_start, day_end) for the calendar day (naive; Odoo compares with stored UTC)
             day_start = datetime.combine(day, datetime.min.time())
             day_end = day_start + timedelta(days=1)
 
@@ -728,8 +736,9 @@ class VetoraApiController(http.Controller):
             )
 
     @http.route("/vetora/json/calendar/week", type="json", auth="user", methods=["POST"])
-    def calendar_week(self, **payload):
+    def calendar_week(self, **kwargs):
         """Return calendar data for a full week (7 days)."""
+        payload = {**_json_payload(), **kwargs}
         try:
             env = request.env
             date_str = payload.get("date")
@@ -738,7 +747,14 @@ class VetoraApiController(http.Controller):
             day = fields.Date.from_string(date_str)
             company_id = payload.get("company_id") or env.company.id
             location_id = payload.get("location_id")
-            doctor_ids = payload.get("doctor_ids") or []
+            raw_doctor_ids = payload.get("doctor_ids") or []
+            doctor_ids = []
+            for x in raw_doctor_ids:
+                try:
+                    if x is not None:
+                        doctor_ids.append(int(x))
+                except (TypeError, ValueError):
+                    pass
 
             start_day = day
             end_day = start_day + timedelta(days=7)
