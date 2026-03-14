@@ -203,7 +203,7 @@ class VetoraApiController(http.Controller):
             doctor_ids = payload.get("doctor_ids") or []
 
             # compute datetime range [day_start, day_end)
-            day_start = fields.Datetime.combine(day, datetime.min.time())
+            day_start = datetime.combine(day, datetime.min.time())
             day_end = day_start + timedelta(days=1)
 
             Doctor = env["vet.doctor"].sudo()
@@ -367,6 +367,7 @@ class VetoraApiController(http.Controller):
         Schedule = env["vet.schedule"].sudo()
 
         try:
+            keep_ids = set()
             for item in schedules_payload:
                 weekday = item.get("weekday")
                 start_str = item.get("start_time")
@@ -404,10 +405,23 @@ class VetoraApiController(http.Controller):
                             http_status=404,
                         )
                     schedule.write(vals)
+                    keep_ids.add(schedule_id)
                     _logger.info("vetora clinic_schedule SAVE: updated id=%s vals=%s", schedule_id, vals)
                 else:
                     rec = Schedule.create(vals)
+                    keep_ids.add(rec.id)
                     _logger.info("vetora clinic_schedule SAVE: created id=%s vals=%s", rec.id, vals)
+
+            # Remove schedules that are no longer in the payload (so duplicates can be deleted).
+            domain_remove = [("company_id", "=", company_id)]
+            if location_id is not None:
+                domain_remove.append(("location_id", "=", location_id))
+            all_schedules = Schedule.search(domain_remove)
+            to_remove = all_schedules.filtered(lambda s: s.id not in keep_ids)
+            if to_remove:
+                removed_ids = to_remove.ids
+                to_remove.unlink()
+                _logger.info("vetora clinic_schedule SAVE: removed %s obsolete schedule(s) ids=%s", len(removed_ids), removed_ids)
 
             # Flush so search in GET sees the new/updated records in the same transaction.
             env.flush_all()
@@ -710,8 +724,8 @@ class VetoraApiController(http.Controller):
 
             start_day = day
             end_day = start_day + timedelta(days=7)
-            day_start = fields.Datetime.combine(start_day, datetime.min.time())
-            day_end = fields.Datetime.combine(end_day, datetime.min.time())
+            day_start = datetime.combine(start_day, datetime.min.time())
+            day_end = datetime.combine(end_day, datetime.min.time())
 
             Doctor = env["vet.doctor"].sudo()
             domain_doctor = [("active", "=", True), ("company_id", "=", company_id)]
@@ -1023,7 +1037,7 @@ class VetoraApiController(http.Controller):
 
         if date_str and not (start_at_str or end_at_str):
             day = fields.Date.from_string(date_str)
-            day_start = fields.Datetime.combine(day, datetime.min.time())
+            day_start = datetime.combine(day, datetime.min.time())
             day_end = day_start + timedelta(days=1)
             domain += [("start_at", "<", day_end), ("end_at", ">", day_start)]
         else:
