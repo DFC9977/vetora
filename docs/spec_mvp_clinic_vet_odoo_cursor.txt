@@ -1,0 +1,629 @@
+15. Progres implementare � 11.03.2026
+
+15.1 Backend Odoo (`vetora_clinic`)
+- Controllers JSON pentru Vetora sunt active (calendar zi, create/update/reschedule visit, schimbare status, lookup doctores, servicii, pacien?i, clien?i, detail patient/client).
+- `lookup_doctors` a fost ajustat pentru a include ?i doctorii f?r? `company_id` setat, astfel �nc�t s? apar? corect �n interfa??.
+- `lookup_clients` serializeaz? c�mpul `mobile` cu `getattr` pentru a evita erorile pe instan?ele Odoo unde `res.partner.mobile` nu este definit.
+- `__init__.py` al addon-ului import? controller-ele pentru ca rutele JSON s? fie �nregistrate corect.
+
+15.2 Frontend custom Vetora (`E:\vetora\vetora_front`)
+- Proiect Next.js + TypeScript creat, configurat s? foloseasc? Odoo ca backend printr-un proxy `/api/odoo/...` (Next.js Route Handler) cu JSON-RPC ?i sesiune Odoo (cookies) propagate.
+- Client API tipizat (`lib/apiClient.ts`, `lib/types.ts`) care trateaz? explicit envelope-ul JSON-RPC ?i contractul `{ ok, data | error }`.
+- Utilitare de timp (`lib/datetime.ts`) pentru format 24h, sloturi la 15 minute ?i conversie la format Odoo `YYYY-MM-DD HH:MM:SS`.
+- Mapare de erori (`lib/errors.ts`) pentru coduri de validare backend precum `OVERLAP_VISIT`, `BLOCK_CONFLICT`, `INVALID_STATUS_TRANSITION` etc.
+
+15.3 Calendar / zi (`/calendar`)
+- Pagina `/calendar` implementat? ca Day View cu:
+  - sloturi la 15 minute �ntre 07:00 ?i 21:00;
+  - coloane pe doctori;
+  - afi?are de vizite cu: or?, pacient, serviciu, status, marcaj URGENT;
+  - filtre pentru doctor ?i status;
+  - buton `Today`, selector de dat? ?i buton `New visit`.
+- Click pe un slot liber (ax? timp sau coloan? doctor) deschide `NewVisitModal` precompletat cu doctorul ?i ora de start.
+- Datele pentru calendar vin exclusiv din backend (endpoint `calendar_day`); frontendul doar construie?te grila de sloturi ?i randeaz? vizitele.
+
+15.4 Pacien?i (`/patients`, `/patients/[id]`)
+- `/patients`:
+  - list? pacien?i bazat? pe endpointul `lookup_patients` (search dup? nume pacient, respect�nd capabilit??ile backendului);
+  - coloane afi?ate: pacient (link c?tre detaliu), proprietar; coloanele f?r? date fiabile (specie, alerte) nu sunt afi?ate �n list? pentru a p?stra UI-ul onest.
+  - st?ri clare de loading, empty ?i error.
+- `/patients/[id]`:
+  - folose?te endpointul `detail_patient` plus lookup la doctori ?i servicii;
+  - afi?eaz? date de baz? pacient (nume, specie, ras?, sex, dat? na?tere, microcip, alert? scurt? dac? exist?);
+  - afi?eaz? proprietarul (clientul) cu date de contact;
+  - include ac?iunea `New visit` care deschide `NewVisitModal` cu pacientul deja preselectat;
+  - la creare reu?it? de vizit?, afi?eaz? confirmare scurt? ?i nu rupe navigarea.
+
+15.5 Clien?i (`/clients`, `/clients/[id]`)
+- `/clients`:
+  - list? clien?i alimentat? de `lookup_clients`;
+  - search dup? nume client;
+  - coloane: Client (link spre detaliu), Phone (prioritizeaz? `mobile`, apoi `phone`, altfel ���), Email (sau ���);
+  - include st?ri loading/empty/error.
+- `/clients/[id]`:
+  - folose?te `detail_client` pentru a afi?a nume, telefon, mobil (dac? exist?), email, adres?;
+  - sec?iunea �Associated patients� este marcat? explicit ca �not available in current API�, deoarece endpointul nu trimite �nc? aceast? list?.
+
+15.6 New visit � flux unificat
+- Componenta `NewVisitModal` este reutilizat? at�t din `/calendar`, c�t ?i din `/patients/[id]`:
+  - search pacient dup? nume (conform `lookup_patients`);
+  - selectare serviciu ?i doctor;
+  - marcaj urgent, noti?e;
+  - selec?ie explicit? de dat? ?i or? (24h), cu valorile precompletate din context (slot calendar sau �acum� pe data selectat?);
+  - trimitere c?tre endpointul de create visit, cu tratarea codurilor de eroare din backend prin mesaje UI prietenoase.
+
+15.7 Ce r?m�ne �n lucru (�n afara acestui pas)
+- Week View ?i zona de Set?ri nu sunt �nc? implementate �n frontend.
+- Drag & drop pentru reprogramare este planificat ulterior; momentan reprogramarea se va face prin modale.
+- Istoric de vizite per pacient/client �n frontend depinde de extinderea API-ului Odoo ?i este marcat ca �next step� �n spec.
+
+Specifica?ie func?ional? MVP
+Clinic Vet � Odoo + interfa?? custom
+Document de lucru consolidat din discu?ia curent?: decizii de produs, structur? MVP, delimitare Odoo vs custom ?i prompt de implementare pentru Cursor.
+Versiune: v1
+Data: 12 martie 2026
+
+Decizie-cheie: Odoo r?m�ne motorul din spate pentru administrare, securitate, date de baz? ?i facturare. Interfa?a folosit? zilnic de recep?ie ?i program?ri trebuie f?cut? custom, cu calendar tip Outlook, sloturi la 15 minute ?i flux opera?ional simplu.
+1. Rezumat executiv
+Produsul vizat nu trebuie construit ca un ERP generic folosit direct din interfa?a standard Odoo. Direc?ia validat? este o arhitectur? hibrid?: Odoo r?m�ne engine-ul de business ?i administrare, iar operarea zilnic? (calendar, program?ri, recep?ie, fi?e rapide) se face printr-o interfa?? custom, orientat? pe vitez? ?i claritate.
+* Calendarul este ecranul principal de lucru.
+* Slotul minim este de 15 minute; toate duratele sunt multipli de 15.
+* Pacientul ?i clientul/proprietarul r?m�n entit??i separate.
+* Programarea ?i vizita sunt acela?i obiect �n MVP; se diferen?iaz? prin status.
+* Set?rile includ program cabinet, doctori, bloc?ri ?i servicii.
+* Facturarea ?i zona administrativ? r?m�n �n Odoo/back-office �n prima etap?.
+1.1 Ce urm?rim �n MVP
+Obiectiv
+Ce �nseamn? concret
+Rezultat urm?rit
+Operare rapid?
+Recep?ia lucreaz? aproape exclusiv din Calendar
+Mai pu?ine clickuri, mai pu?ine erori
+Validare corect?
+Doctori, bloc?ri, servicii ?i durate valideaz? programarea
+Nu se suprapun program?ri gre?ite
+Date curate
+Client, pacient, serviciu ?i statusuri separate clar
+Raportare ?i extindere ulterioar? s?n?toas?
+Scalabilitate
+Odoo r?m�ne engine-ul stabil; UI-ul poate evolua separat
+Nu rescriem inutil ERP-ul
+2. Arhitectura validat?: ce p?str?m ?i ce construim custom
+Zon?
+R?m�ne �n Odoo
+Devine custom
+Administrare
+Utilizatori, roluri, permisiuni, companii, date de baz?
+�
+Facturare
+Facturi, produse/servicii ca baz?, logic? ERP
+doar leg?turi din frontul opera?ional
+Operare zilnic?
+�
+Calendar, program?ri, bloc?ri rapide, schimb?ri de status
+Date clinice opera?ionale
+modele de baz? ?i stocare
+fi?? pacient ?i client simplificat? pentru lucru rapid
+2.1 De ce nu folosim UI-ul standard Odoo ca produs final
+* Este bun ca back-office ?i administrare, dar prea greu pentru recep?ie.
+* Calendarul ?i program?rile trebuie s? fie centrul produsului, nu un modul generic printre altele.
+* Fluxul clinic are reguli specifice: sloturi la 15 minute, doctori, bloc?ri, statusuri, reprogram?ri, urgen?e.
+3. Meniul principal al aplica?iei
+Meniu
+Rol
+Observa?ii
+Calendar
+Centru opera?ional zilnic
+Vedere implicit?: Zi
+Pacien?i
+Fi?e animale ?i istoric vizite/program?ri
+Ac?iune cheie: Programare nou?
+Clien?i
+Proprietari ?i lista animalelor asociate
+Un client poate avea mai mul?i pacien?i
+Set?ri
+Program cabinet, doctori, bloc?ri, servicii
+Zon? de configurare, nu de operare
+4. Entit??ile de baz?
+Entitate
+Descriere
+C�mpuri / idei-cheie
+Cabinet / loca?ie
+Unitatea opera?ional?
+Adres?, program general, activ/inactiv
+Doctor
+Prestatorul program?rilor
+Program propriu, servicii eligibile, culoare, activ/inactiv
+Blocare
+Indisponibilitate controlat?
+Concediu, pauz?, training, blocare manual?
+Serviciu
+?ablon opera?ional al program?rii
+Durat?, pre?, categorie, compatibilitate doctor
+Client
+Proprietarul / persoana de contact
+Date contact, list? pacien?i, istoric
+Pacient
+Animalul
+Identitate, proprietar, alerte, istoric
+Programare/Vizit?
+Obiectul central al produsului
+Pacient, doctor, serviciu, interval, status
+5. Calendarul � ecranul principal de lucru
+5.1 Vedere ?i structur?
+* Vedere implicit?: Zi.
+* Gril? vertical? cu sloturi din 15 �n 15 minute.
+* Coloane pe doctori.
+* Bar? de sus cu data selectat?, Azi, Zi/S?pt?m�n?, filtre, c?utare ?i Programare nou?.
+* Bloc?rile apar distinct de program?ri.
+* �n afara programului doctorului, intervalul se vede inactiv.
+5.2 Ce trebuie s? po?i face direct din Calendar
+* Creezi programare nou? din slot liber.
+* Vezi detaliul unei program?ri la click.
+* Schimbi rapid statusul.
+* Mu?i programarea �n alt slot sau la alt doctor (cu validare).
+* Anulezi sau regramezi.
+* Intri �n fi?a pacientului.
+* Adaugi blocare direct din calendar.
+5.3 Filtre ?i c?utare
+Filtru / c?utare
+Scop
+Doctor
+Vezi to?i doctorii sau doar unul
+Status
+Programat, confirmat, sosit, �n consult, finalizat etc.
+Serviciu
+Identifici rapid tipul de activitate
+C?utare pacient / client / telefon
+Flux real de recep?ie
+5.4 Reguli de UX �nghe?ate
+* Calendarul trebuie s? fie rapid ?i curat; nu �nc?rc?m cu date medicale sau financiare detaliate.
+* Culoarea program?rii reflect? statusul; doctorul este identificat �n principal prin coloan?.
+* Cardul unei program?ri arat? doar esen?ialul: ora, pacient, serviciu, status ?i op?ional proprietarul.
+6. Pacien?i � fi?a animalului
+6.1 Ce con?ine fi?a pacientului �n MVP
+* Identitate pacient: nume, specie, ras?, sex, v�rst?/data na?terii, microcip, sterilizat, activ/inactiv.
+* Proprietar asociat: nume, telefon, email, adres?.
+* Alerte / observa?ii importante: agresiv, anxios, alergii, manipulare special? etc.
+* Istoric program?ri / vizite: dat?, doctor, serviciu, status, observa?ii scurte.
+* Ac?iuni rapide: Programare nou?, Editare pacient, Deschide fi?a clientului.
+6.2 Reguli de produs
+* Fi?a pacientului r?m�ne opera?ional?, nu o transform?m �n dosar medical greu din MVP.
+* Observa?iile importante trebuie s? fie scurte ?i foarte vizibile.
+* Din calendar se intr? direct �n fi?a pacientului; din fi?a pacientului se poate crea programare nou?.
+7. Clien?i � fi?a proprietarului
+* Date de contact clare: nume, telefon, email, adres?, observa?ii scurte, activ/inactiv.
+* Lista animalelor asociate, cu acces rapid �n fi?a fiec?ruia.
+* Istoric interac?iuni / program?ri: dat?, pacient, serviciu, doctor, status.
+* Ac?iuni rapide: Pacient nou, Programare nou?, Editare client.
+Regul? �nghe?at?: un client poate avea mai mul?i pacien?i, dar �n MVP fiecare pacient are un proprietar principal unic.
+8. Servicii � nucleul opera?ional
+Element
+Obligatoriu �n MVP
+Observa?ii
+Denumire + categorie
+Da
+Ajut? la ordonare, filtrare ?i raportare
+Durat? implicit?
+Da
+Multiplu de 15 minute
+Pre? implicit
+Da
+Snapshot-ul folosit la programare/facturare r?m�ne separat
+Doctori eligibili
+Da
+Nu orice doctor poate presta orice serviciu
+Culoare
+Da
+Util? pentru identificare vizual? secundar?
+Resurs?/sal?
+Nu, faza 2
+Se proiecteaz? arhitectural, dar nu se livreaz? �n MVP
+8.1 Reguli de produs
+* Fiecare programare are un singur serviciu principal.
+* Durata serviciului este implicit?, dar poate fi suprascris? doar controlat.
+* Schimbarea pre?ului serviciului nu rescrie retroactiv istoricul vechi.
+* Serviciile inactive nu mai pot fi folosite la program?ri noi.
+9. Doctori, program ?i bloc?ri
+9.1 Ce definim pentru doctor
+* Nume complet, nume scurt, specializare, culoare �n calendar, activ/inactiv.
+* Program standard pe zile ?i intervale.
+* Servicii permise / eligibile.
+* Vizibilitate �n calendar ?i posibilitatea de a primi program?ri noi.
+9.2 Program vs bloc?ri
+Concept
+Rol
+Regul?
+Program cabinet
+Define?te orarul general de func?ionare
+Separat de programul doctorului
+Program doctor
+?ablonul standard de disponibilitate
+Se aplic? recurent pe zile
+Blocare
+Excep?ia peste programul standard
+Bate programarea la validare
+9.3 Tipuri de bloc?ri �n MVP
+* Concediu
+* Pauz?
+* Training
+* Indisponibilitate
+* Blocare manual?
+* ?edin??
+Regul? critic?: durata program?rii trebuie s? �ncap? integral �n intervalul liber. Nu este suficient ca doar startul s? fie liber.
+10. Programarea / vizita � obiectul central
+10.1 Model simplificat pentru MVP
+* �n MVP, programarea ?i vizita sunt acela?i obiect care �?i schimb? statusul.
+* Programarea con?ine: pacient, client, doctor, serviciu, dat?, or? �nceput, durat?, status, observa?ii, surs?, urgent sau nu.
+* Clientul vine implicit din pacient, nu se dubleaz? manual.
+10.2 Statusurile validate
+Status
+Semnifica?ie
+Programat
+Statusul ini?ial
+Confirmat
+A fost confirmat? de recep?ie / telefonic
+Sosit
+Pacientul a ajuns �n clinic?
+�n consult
+Doctorul l-a preluat
+Finalizat
+Vizita s-a terminat
+Anulat
+Nu mai are loc
+Neprezentat
+Nu s-a prezentat ?i nu a anun?at
+Reprogramat
+A fost mutat �n alt interval ?i trebuie p?strat istoricul
+10.3 Tranzi?ii ?i ac?iuni
+* Flux normal: Programat ? Confirmat ? Sosit ? �n consult ? Finalizat.
+* Fluxuri alternative: Programat/Confirmat ? Anulat, Neprezentat sau Reprogramat.
+* Ac?iuni permise: creare, editare, mutare, schimbare doctor/serviciu, anulare, reprogramare, schimbare status, deschidere fi?? pacient.
+11. Set?ri � structur? exact?
+Set?rile reprezint? zona de configurare ?i administrare. Ele nu trebuie s? fie folosite continuu de recep?ie, ci doar c�nd se definesc reguli sau date master. Pentru claritate ?i disciplin?, Set?rile se �mpart �n patru subsec?iuni principale.
+Subsec?iune
+Ce con?ine
+Cine o folose?te
+Observa?ii
+Program cabinet
+Orar general, zile nelucr?toare, interval implicit slot
+Admin / manager
+Valabil la nivel de loca?ie
+Doctori
+Date doctor, culoare, program standard, servicii permise
+Admin
+Nu se ?terg; doar activ/inactiv
+Bloc?ri
+Concedii, pauze, training, indisponibilit??i, bloc?ri recurente
+Admin / recep?ie autorizat?
+Se pot crea ?i din Calendar
+Servicii
+Denumire, categorie, durat?, pre?, doctori eligibili, activ/inactiv
+Admin
+Dicteaz? logica program?rilor
+11.1 Program cabinet
+* Program pe zile.
+* Intervale orare de lucru.
+* Pauze generale, dac? este nevoie.
+* Zile nelucr?toare / excep?ii la nivel de cabinet.
+* Interval implicit de slot: 15 minute.
+11.2 Doctori
+* List? doctori cu activ/inactiv.
+* Fi?? doctor cu program standard pe zile.
+* Asociere servicii eligibile.
+* Culoare de identificare �n calendar.
+* Bloc?ri viitoare vizibile �n contextul doctorului.
+11.3 Bloc?ri
+* Blocare punctual? sau recurent?.
+* Aplicat? pe doctor sau pe �ntreg cabinetul.
+* Tip de blocare + motiv scurt.
+* Interval de �nceput ?i sf�r?it.
+* Semnalare de conflict dac? se suprapune peste program?ri deja existente.
+11.4 Servicii
+* Catalog ordonat pe categorii.
+* Durat? implicit? ?i pre? implicit.
+* Doctori eligibili.
+* Activ/inactiv.
+* Regul?: duratele sunt multipli de 15 minute.
+11.5 Ce NU intr? �n Set?ri �n MVP
+* Rapoarte ?i dashboard-uri avansate.
+* Automatiz?ri complexe de marketing / reminders sofisticate.
+* Configura?ii medicale grele sau nomenclatoare inutile pentru recep?ie.
+* Facturarea propriu-zis? �n interfa?a front custom.
+12. Scope clar: ce intr? ?i ce am�n?m
+Component?
+�n MVP
+Am�nat pentru faza 2+
+Calendar zi/s?pt?m�n?
+Da
+vederi suplimentare ?i optimiz?ri complexe
+Program?ri + statusuri
+Da
+workflow medical avansat
+Pacien?i + Clien?i
+Da
+coproprietari, multiple rela?ii complexe
+Doctori + bloc?ri
+Da
+rota?ii automate, �nc?rcare inteligent?
+Servicii
+Da
+pachete, reguli promo?ionale, pre?uri dinamice
+Resurse / s?li
+Nu
+Da, �n faza 2
+SMS / WhatsApp complex
+Nu
+Da, ulterior
+Dosar medical complex
+Nu
+Da, ulterior
+Facturare �n front custom
+Nu
+Odoo/back-office �n prima etap?
+13. Criterii de acceptan?? pentru MVP
+* Utilizatorul intr? �n Calendar ?i poate lucra o zi �ntreag? f?r? s? depind? de meniurile Odoo standard.
+* Program?rile se creeaz? din slot liber ?i apar imediat �n calendar.
+* Valid?rile blocheaz? suprapuneri, bloc?ri ?i program?ri �n afara intervalelor permise.
+* Pacientul, clientul ?i istoricul lor sunt accesibile direct din fluxul de programare.
+* Doctorii ?i serviciile filtreaz? corect disponibilitatea.
+* Set?rile permit administrarea clar? a programului, serviciilor ?i bloc?rilor f?r? haos.
+14. Prompt pentru Cursor � implementarea produsului
+Mai jos este promptul consolidat pentru Cursor. Scopul lui este s? ghideze implementarea f?r? improviza?ii ?i f?r? a rescrie tot Odoo. Promptul cere analiz? a proiectului existent, propunere de structur? ?i implementare a MVP-ului validat �n aceast? discu?ie.
+CONTEXT
+Vreau s? construiesc un MVP pentru o clinic? veterinar? folosind Odoo ca engine/back-office ?i o interfa?? custom pentru operarea zilnic?. Nu vreau s? folosesc interfa?a stock Odoo ca produs final pentru recep?ie. Vreau s? p?strez Odoo pentru utilizatori, roluri, companii, date de baz? ?i facturare, iar partea de lucru zilnic? s? fie custom.
+
+OBIECTIV
+Construie?te MVP-ul astfel �nc�t recep?ia s? poat? lucra aproape exclusiv dintr-un Calendar custom, cu sloturi la 15 minute ?i coloane pe doctori, similar ca logic? de folosire cu Outlook, dar adaptat clinicii veterinare.
+
+ARHITECTUR? VALIDAT?
+1. Odoo r?m�ne motorul din spate pentru:
+- utilizatori
+- roluri ?i permisiuni
+- companii / loca?ii
+- date de baz?
+- facturare / back-office
+
+2. Interfa?a custom trebuie s? acopere:
+- Calendar
+- Program?ri / vizite
+- Pacien?i
+- Clien?i
+- Set?ri opera?ionale
+
+REGULI DE PRODUS �NGHE?ATE
+- Calendarul este home screen-ul real.
+- Vederea implicit? este Zi.
+- Slotul minim este 15 minute.
+- Toate duratele sunt multipli de 15 minute.
+- Pacientul ?i clientul sunt entit??i separate.
+- Un client poate avea mai mul?i pacien?i.
+- �n MVP, programarea ?i vizita sunt acela?i obiect care �?i schimb? statusul.
+- Fiecare programare are un singur serviciu principal.
+- Bloc?rile sunt distincte de program?ri.
+- Reprogramarea trebuie s? p?streze istoricul.
+- Facturarea r?m�ne �n Odoo/back-office �n prima etap?.
+
+MENIUL PRINCIPAL CERUT
+- Calendar
+- Pacien?i
+- Clien?i
+- Set?ri
+
+DETALIU PE MODULE
+
+A. CALENDAR
+Creeaz? un ecran principal de Calendar cu:
+- bar? de sus: data curent?, Azi, Zi / S?pt?m�n?, filtre, c?utare, Programare nou?
+- gril? vertical? cu sloturi la 15 minute
+- coloane pe doctori
+- afi?area clar? a programului doctorului
+- afi?area intervalelor inactive
+- afi?area bloc?rilor distinct de program?ri
+- afi?area program?rilor cu status vizibil
+
+Ac?iuni obligatorii din Calendar:
+- creare programare din slot liber
+- click pe programare pentru detaliu rapid
+- schimbare rapid? de status
+- mutare programare �n alt slot / la alt doctor cu validare
+- anulare
+- reprogramare
+- intrare �n fi?a pacientului
+- ad?ugare blocare direct din calendar
+
+Filtre obligatorii:
+- doctor
+- status
+- serviciu
+
+C?utare obligatorie dup?:
+- pacient
+- client
+- telefon
+
+B. PACIEN?I
+Creeaz? modulul Pacien?i cu:
+- list? pacien?i
+- fi?? pacient
+
+Fi?a pacientului trebuie s? includ?:
+- nume
+- specie
+- ras?
+- sex
+- data na?terii sau v�rsta
+- microcip
+- sterilizat
+- proprietar asociat
+- telefon proprietar
+- email proprietar
+- alerte / observa?ii importante
+- istoric program?ri / vizite
+- ac?iune rapid? Programare nou?
+
+IMPORTANT:
+Nu transforma MVP-ul �ntr-un dosar medical complex. Fi?a pacientului trebuie s? r?m�n? opera?ional? ?i simpl?.
+
+C. CLIEN?I
+Creeaz? modulul Clien?i cu:
+- list? clien?i
+- fi?? client
+
+Fi?a clientului trebuie s? includ?:
+- nume
+- telefon principal
+- telefon secundar, dac? exist?
+- email
+- adres?
+- observa?ii scurte
+- lista pacien?ilor asocia?i
+- istoric interac?iuni / program?ri
+- ac?iuni rapide: Pacient nou, Programare nou?
+
+D. SERVICII
+Creeaz? �n Set?ri un catalog de servicii cu:
+- denumire
+- categorie
+- durat? implicit?
+- pre? implicit
+- culoare
+- activ / inactiv
+- necesit? doctor: da / nu
+- doctori eligibili
+
+Reguli:
+- duratele sunt multipli de 15 minute
+- schimbarea pre?ului serviciului nu trebuie s? rescrie retroactiv istoricul vechi
+- serviciile inactive nu mai pot fi folosite �n program?ri noi
+
+E. DOCTORI
+Creeaz? �n Set?ri un modul Doctori cu:
+- nume complet
+- nume scurt
+- specializare
+- culoare �n calendar
+- activ / inactiv
+- program standard pe zile
+- servicii permise / eligibile
+
+Reguli:
+- doctorii inactivi p?streaz? istoricul
+- doctorii inactivi nu mai pot primi program?ri noi
+
+F. BLOC?RI
+Creeaz? un modul de Bloc?ri cu:
+- concediu
+- pauz?
+- training
+- indisponibilitate
+- blocare manual?
+- ?edin??
+
+Pentru fiecare blocare:
+- tip
+- �nceput
+- sf�r?it
+- doctor sau cabinet
+- motiv scurt
+- recurent? sau nu
+
+Reguli:
+- bloc?rile bat program?rile la validare
+- dac? se creeaz? o blocare peste program?ri deja existente, semnaleaz? conflictul
+- bloc?rile trebuie s? poat? fi ad?ugate ?i din Calendar, nu doar din Set?ri
+
+G. PROGRAM?RI / VIZITE
+Define?te obiectul central Programare/Vizit? cu c�mpuri:
+- pacient
+- client
+- doctor
+- serviciu
+- dat?
+- or? �nceput
+- durat?
+- status
+- observa?ii scurte
+- surs? programare
+- urgent sau nu
+
+Statusuri obligatorii:
+- Programat
+- Confirmat
+- Sosit
+- �n consult
+- Finalizat
+- Anulat
+- Neprezentat
+- Reprogramat
+
+Tranzi?ii:
+- flux normal: Programat ? Confirmat ? Sosit ? �n consult ? Finalizat
+- alternativ: Programat / Confirmat ? Anulat
+- alternativ: Programat / Confirmat ? Neprezentat
+- alternativ: Programat / Confirmat ? Reprogramat
+
+VALID?RI OBLIGATORII
+- nu se poate salva f?r? pacient, client, doctor, serviciu, interval
+- doctorul nu poate avea dou? program?ri simultane
+- nu se poate programa peste bloc?ri
+- nu se poate programa �n afara programului doctorului
+- durata trebuie s? �ncap? integral �n intervalul liber
+- serviciul trebuie s? fie compatibil cu doctorul
+
+SCOPE
+Livreaz? strict MVP-ul. Nu intra acum �n:
+- dosar medical complex
+- resurse / s?li complexe
+- rota?ii automate
+- reminders SMS / WhatsApp sofisticate
+- portal client complex
+- raportare avansat?
+- facturare complet? �n frontul custom
+
+CE VREAU DE LA TINE
+1. Analizeaz? structura actual? a proiectului ?i spune unde trebuie pus fiecare modul.
+2. Propune o arhitectur? clar? pentru:
+   - modele
+   - servicii / logic?
+   - pagini / ecrane
+   - componente UI
+   - valid?ri
+3. Confirm? explicit ce r?m�ne �n Odoo ?i ce este implementat �n interfa?a custom.
+4. Creeaz? un plan de implementare pe pa?i, �n ordinea corect?.
+5. Implementeaz? MVP-ul f?r? improviza?ii ?i f?r? func?ii extra necerute.
+6. La final, genereaz?:
+   - structur? de fi?iere actualizat?
+   - list? scurt? de decizii tehnice
+   - list? de lucruri am�nate pentru faza 2
+   - checklist de testare pentru fluxurile principale
+
+IMPORTANT
+- Nu rescrie tot Odoo.
+- Nu transforma produsul �ntr-un ERP generic.
+- Optimizeaz? pentru recep?ie ?i operare rapid?.
+- P?streaz? UI-ul curat ?i orientat pe productivitate.
+- C�nd ai dubii �ntre �mai mult� ?i �mai simplu�, alege varianta mai simpl?, dar corect?.
+Specifica?ie MVP � Clinic Vet / Odoo + UI custom
+
+16. MVP FREEZE / RELEASE CANDIDATE (11.03.2026)
+
+- Backendul Odoo (`vetora_clinic`) ofer? acum toate endpointurile JSON necesare pentru:
+  - calendar zi (`/vetora/json/calendar/day`) ?i s?pt?m�n? (`/vetora/json/calendar/week`);
+  - create / update / reschedule / change status pentru vizite;
+  - lookup doctori, servicii, pacien?i, clien?i;
+  - detail patient / client, cu history ?i associated patients;
+  - set?ri: program cabinet, doctori, servicii, bloc?ri;
+  - bloc?ri: create / list / update / delete.
+- Frontendul custom (`vetora_front`, Next.js + TypeScript) acoper? complet MVP-ul:
+  - **Day View** (`/calendar`): new visit din slot activ, detail modal, quick status/cancel, reschedule, create/edit/delete block, slot blocat sau inactiv nu deschide new visit, filtre (doctor/status/serviciu), search pacient/client/telefon, reset filtre.
+  - **Week View** (`/calendar/week`): navigare previous/this/next, click programare cu detail modal, quick status, reschedule, bloc?ri doctor vizibile pe celule, bloc?ri de clinic? �n band? separat?, filtre (doctor/status/serviciu/search) ?i reset.
+  - **Settings** (`/settings/...`): Program cabinet, Doctori, Servicii, Bloc?ri, cu list? + formular create/edit ?i valid?ri de baz?.
+  - **Patients/Clients**: liste cu search, detail patient cu history ?i ac?iune New visit, detail client cu associated patients + history.
+- Tipurile TypeScript (`lib/types.ts`) ?i clientul API (`lib/apiClient.ts`) sunt �nghe?ate pe contractul actual Odoo, folosind `ApiResponse<T>` uniform.
+- Erorile backend sunt mapate la mesaje UI prietenoase prin `lib/errors.ts` (`OVERLAP_VISIT`, `BLOCK_CONFLICT`, `OUTSIDE_*_SCHEDULE`, `INVALID_DURATION`, `INVALID_STATUS_TRANSITION`, etc.).
+- Documente de referin?? pentru release candidate:
+  - `docs/MVP_FREEZE_SUMMARY.md` � rezumatul final de scope, arhitectur?, fluxuri, endpointuri cheie, known limitations ?i backlog Phase 2.
+  - `docs/MANUAL_TEST_CHECKLIST_MVP.md` � checklist detaliat de testare manual? (Day/Week, Settings, Patients, Clients, regresii).
+
+Note: Nu se mai adaug? func?ionalit??i noi �n acest MVP; modific?rile ulterioare trebuie tratate ca Phase 2 / evolu?ii peste release-ul actual.

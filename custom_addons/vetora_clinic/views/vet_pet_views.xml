@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Tree view for vet.pet -->
+    <record id="view_vet_pet_tree" model="ir.ui.view">
+        <field name="name">vet.pet.tree</field>
+        <field name="model">vet.pet</field>
+        <field name="arch" type="xml">
+            <list string="Patients">
+                <field name="name"/>
+                <field name="owner_id"/>
+                <field name="species"/>
+                <field name="breed"/>
+                <field name="gender"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form view for vet.pet -->
+    <record id="view_vet_pet_form" model="ir.ui.view">
+        <field name="name">vet.pet.form</field>
+        <field name="model">vet.pet</field>
+        <field name="arch" type="xml">
+            <form string="Patient">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="owner_id"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="species"/>
+                            <field name="breed"/>
+                            <field name="gender"/>
+                            <field name="birth_date"/>
+                            <field name="microchip"/>
+                            <field name="is_sterilized"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="alerts_short"/>
+                    </group>
+                    <notebook>
+                        <page string="Visits" name="visits">
+                            <field name="visit_ids" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search view for vet.pet -->
+    <record id="view_vet_pet_search" model="ir.ui.view">
+        <field name="name">vet.pet.search</field>
+        <field name="model">vet.pet</field>
+        <field name="arch" type="xml">
+            <search string="Search Patients">
+                <field name="name"/>
+                <field name="owner_id"/>
+                <field name="species"/>
+                <filter string="Active" name="active" domain="[('active', '=', True)]"/>
+                <filter string="Inactive" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+</odoo>
+

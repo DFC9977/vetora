@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_vet_schedule_list" model="ir.ui.view">
+        <field name="name">vet.schedule.list</field>
+        <field name="model">vet.schedule</field>
+        <field name="arch" type="xml">
+            <list string="Clinic Schedule">
+                <field name="weekday"/>
+                <field name="start_time"/>
+                <field name="end_time"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_vet_schedule_form" model="ir.ui.view">
+        <field name="name">vet.schedule.form</field>
+        <field name="model">vet.schedule</field>
+        <field name="arch" type="xml">
+            <form string="Clinic Schedule">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="weekday"/>
+                        <field name="start_time" widget="float_time"/>
+                        <field name="end_time" widget="float_time"/>
+                        <field name="location_id"/>
+                        <field name="active"/>
+                        <field name="company_id" groups="base.group_multi_company"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_vet_doctor_schedule_list" model="ir.ui.view">
+        <field name="name">vet.doctor.schedule.list</field>
+        <field name="model">vet.doctor.schedule</field>
+        <field name="arch" type="xml">
+            <list string="Doctor Schedule">
+                <field name="doctor_id"/>
+                <field name="weekday"/>
+                <field name="start_time"/>
+                <field name="end_time"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_vet_doctor_schedule_form" model="ir.ui.view">
+        <field name="name">vet.doctor.schedule.form</field>
+        <field name="model">vet.doctor.schedule</field>
+        <field name="arch" type="xml">
+            <form string="Doctor Schedule">
+                <sheet>
+                    <group>
+                        <field name="doctor_id"/>
+                        <field name="weekday"/>
+                        <field name="start_time" widget="float_time"/>
+                        <field name="end_time" widget="float_time"/>
+                        <field name="location_id"/>
+                        <field name="active"/>
+                        <field name="company_id" groups="base.group_multi_company"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+</odoo>
+

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+vetora_front/node_modules/
+
+# Next.js
+vetora_front/.next/
+vetora_front/out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.eggs/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/

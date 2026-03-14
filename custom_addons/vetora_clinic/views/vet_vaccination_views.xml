@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Basic skeleton views for vet.vaccination (to be extended later) -->
+    <record id="view_vet_vaccination_tree" model="ir.ui.view">
+        <field name="name">vet.vaccination.tree</field>
+        <field name="model">vet.vaccination</field>
+        <field name="arch" type="xml">
+            <list string="Vaccinations">
+                <field name="name"/>
+                <field name="pet_id"/>
+                <field name="vaccine_type"/>
+                <field name="date_administered"/>
+                <field name="date_next"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_vet_vaccination_form" model="ir.ui.view">
+        <field name="name">vet.vaccination.form</field>
+        <field name="model">vet.vaccination</field>
+        <field name="arch" type="xml">
+            <form string="Vaccination">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="pet_id"/>
+                            <field name="vaccine_type"/>
+                        </group>
+                        <group>
+                            <field name="date_administered"/>
+                            <field name="date_next"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+</odoo>
+

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_vet_doctor_list" model="ir.ui.view">
+        <field name="name">vet.doctor.list</field>
+        <field name="model">vet.doctor</field>
+        <field name="arch" type="xml">
+            <list string="Doctors">
+                <field name="name"/>
+                <field name="short_name"/>
+                <field name="specialization"/>
+                <field name="calendar_color"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_vet_doctor_form" model="ir.ui.view">
+        <field name="name">vet.doctor.form</field>
+        <field name="model">vet.doctor</field>
+        <field name="arch" type="xml">
+            <form string="Doctor">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="short_name"/>
+                            <field name="user_id"/>
+                            <field name="specialization"/>
+                            <field name="calendar_color"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="service_ids" widget="many2many_tags"/>
+                            <field name="location_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_vet_doctor_search" model="ir.ui.view">
+        <field name="name">vet.doctor.search</field>
+        <field name="model">vet.doctor</field>
+        <field name="arch" type="xml">
+            <search string="Search Doctors">
+                <field name="name"/>
+                <field name="short_name"/>
+                <field name="specialization"/>
+                <filter string="Active" name="active" domain="[('active', '=', True)]"/>
+                <filter string="Inactive" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+</odoo>
+

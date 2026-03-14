@@ -1,0 +1,211 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* vetora_clinic
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-12 00:00+0000\n"
+"PO-Revision-Date: 2026-03-12 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: hu\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: vetora_clinic
+#: model:ir.actions.act_window,name:vetora_clinic.action_vet_pet
+#: model:ir.ui.menu,name:vetora_clinic.menu_vet_pet
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_pet_tree
+msgid "Patients"
+msgstr "Páciensek"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_pet_form
+msgid "Patient"
+msgstr "Páciens"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_pet_search
+msgid "Search Patients"
+msgstr "Páciensek keresése"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__name
+msgid "Animal Name"
+msgstr "Állat neve"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__owner_id
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__owner_id
+msgid "Owner"
+msgstr "Tulajdonos"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__species
+msgid "Species"
+msgstr "Faj"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__breed
+msgid "Breed"
+msgstr "Fajta"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__gender
+msgid "Sex"
+msgstr "Nem"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__birth_date
+msgid "Date of Birth"
+msgstr "Születési dátum"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__microchip
+msgid "Microchip"
+msgstr "Mikrocsipp"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_pet__active
+msgid "Active"
+msgstr "Aktív"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__species__dog
+msgid "Dog"
+msgstr "Kutya"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__species__cat
+msgid "Cat"
+msgstr "Macska"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__species__other
+msgid "Other"
+msgstr "Egyéb"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__gender__male
+msgid "Male"
+msgstr "Hím"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__gender__female
+msgid "Female"
+msgstr "Nőstény"
+
+#. module: vetora_clinic
+#: model:ir.model.fields.selection,name:vetora_clinic.selection__vet_pet__gender__unknown
+msgid "Unknown"
+msgstr "Ismeretlen"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_pet_search
+msgid "Inactive"
+msgstr "Inaktív"
+
+#. module: vetora_clinic
+#: model:ir.actions.act_window,help:vetora_clinic.action_vet_pet
+msgid "Create and manage veterinary patients."
+msgstr "Veterinárius páciensek létrehozása és kezelése."
+
+#. module: vetora_clinic
+#: model:ir.ui.menu,name:vetora_clinic.menu_vetora_clinic
+msgid "Clinic"
+msgstr "Klinika"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_visit_tree
+msgid "Visits"
+msgstr "Látogatások"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_visit_form
+msgid "Visit"
+msgstr "Látogatás"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__name
+msgid "Visit Reference"
+msgstr "Látogatás hivatkozás"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__pet_id
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_vaccination__pet_id
+msgid "Patient"
+msgstr "Páciens"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_vaccination_tree
+msgid "Vaccinations"
+msgstr "Vakcinák"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_vaccination_form
+msgid "Vaccination"
+msgstr "Vakcináció"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_vaccination__vaccine_type
+msgid "Vaccine Type"
+msgstr "Vakcina típusa"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_vaccination__date_administered
+msgid "Administration Date"
+msgstr "Adás dátuma"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_vaccination__date_next
+msgid "Next Due Date"
+msgstr "Következő esedékesség"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_vaccination__name
+msgid "Vaccination Reference"
+msgstr "Vakcináció hivatkozás"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__visit_date
+msgid "Visit Date"
+msgstr "Látogatás dátuma"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__vet_id
+msgid "Vet"
+msgstr "Veterinár"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__notes
+msgid "Notes"
+msgstr "Jegyzetek"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__diagnosis
+msgid "Diagnosis"
+msgstr "Diagnózis"
+
+#. module: vetora_clinic
+#: model:ir.model.fields,field_description:vetora_clinic.field_vet_visit__treatment
+msgid "Treatment"
+msgstr "Kezelés"
+
+#. module: vetora_clinic
+#: model:ir.actions.act_window,help:vetora_clinic.action_vet_visit
+msgid "Create and manage veterinary visits."
+msgstr "Veterinárius látogatások létrehozása és kezelése."
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_visit_search
+msgid "Search Visits"
+msgstr "Látogatások keresése"
+
+#. module: vetora_clinic
+#: model:ir.ui.view,arch_db:vetora_clinic.view_vet_visit_search
+msgid "My Visits"
+msgstr "Saját látogatásaim"

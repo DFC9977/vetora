@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_vet_service_list" model="ir.ui.view">
+        <field name="name">vet.service.list</field>
+        <field name="model">vet.service</field>
+        <field name="arch" type="xml">
+            <list string="Services">
+                <field name="sequence"/>
+                <field name="name"/>
+                <field name="category"/>
+                <field name="duration_minutes"/>
+                <field name="default_price"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_vet_service_form" model="ir.ui.view">
+        <field name="name">vet.service.form</field>
+        <field name="model">vet.service</field>
+        <field name="arch" type="xml">
+            <form string="Service">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="sequence"/>
+                            <field name="category"/>
+                            <field name="duration_minutes"/>
+                            <field name="default_price"/>
+                            <field name="color"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="requires_doctor"/>
+                            <field name="eligible_doctor_ids" widget="many2many_tags"/>
+                            <field name="product_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="description_short"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_vet_service_search" model="ir.ui.view">
+        <field name="name">vet.service.search</field>
+        <field name="model">vet.service</field>
+        <field name="arch" type="xml">
+            <search string="Search Services">
+                <field name="name"/>
+                <field name="category"/>
+                <filter string="Active" name="active" domain="[('active', '=', True)]"/>
+                <filter string="Inactive" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+</odoo>
+

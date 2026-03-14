@@ -1,0 +1,253 @@
+PROGRES IMPLEMENTARE FRONTEND – 11.03.2026
+
+1. Calendar
+- Pagina `/calendar` este implementată ca Day View cu sloturi la 15 minute, coloane pe doctori, filtre pentru doctor și status, buton Today, selector de dată și acțiune `New visit`.
+- Vizitele sunt desenate din datele furnizate de endpointul JSON Odoo (`calendar_day`), cu afișare de oră, pacient, serviciu, status și marcaj URGENT.
+- Din slot liber sau din axa de timp se poate deschide `NewVisitModal` cu doctorul și ora de start precompletate.
+
+2. Pacienți
+- `/patients` listează pacienții folosind `lookup_patients`, cu search după nume pacient și link clar către `/patients/[id]`.
+- `/patients/[id]` afișează detaliile de bază ale pacientului și proprietarului și include buton `New visit` care deschide `NewVisitModal` cu pacientul preselectat; după creare reușită, UI-ul confirmă succesul fără a rupe navigarea.
+
+3. Clienți
+- `/clients` listează clienții pe baza `lookup_clients`, cu search după nume, coloane Client / Phone / Email și stări clare de loading/empty/error.
+- `/clients/[id]` afișează datele de contact și adresa; dacă API-ul nu furnizează încă lista pacienților asociați, secțiunea este marcată explicit ca „Associated patients not available in current API.”.
+
+4. Integrare API și backend
+- Toate paginile frontend consumă exclusiv endpointurile JSON Odoo existente, printr-un proxy Next.js `/api/odoo/...` și clientul `apiClient` care dezambalează envelope-ul JSON-RPC și mapează erorile în mesaje UI.
+- Backendul Odoo a fost ajustat minim (în acord cu regulile): import explicit al controllers în addon, relaxare de domeniu pentru `lookup_doctors` și acces defensiv la `res.partner.mobile` în `lookup_clients` pentru a evita erorile la serializare.
+
+CONTEXT
+Vreau să construiesc un MVP pentru o clinică veterinară folosind Odoo ca engine/back-office și o interfață custom pentru operarea zilnică. Nu vreau să folosesc interfața stock Odoo ca produs final pentru recepție. Vreau să păstrez Odoo pentru utilizatori, roluri, companii, date de bază și facturare, iar partea de lucru zilnică să fie custom.
+
+OBIECTIV
+Construiește MVP-ul astfel încât recepția să poată lucra aproape exclusiv dintr-un Calendar custom, cu sloturi la 15 minute și coloane pe doctori, similar ca logică de folosire cu Outlook, dar adaptat clinicii veterinare.
+
+ARHITECTURĂ VALIDATĂ
+1. Odoo rămâne motorul din spate pentru:
+- utilizatori
+- roluri și permisiuni
+- companii / locații
+- date de bază
+- facturare / back-office
+
+2. Interfața custom trebuie să acopere:
+- Calendar
+- Programări / vizite
+- Pacienți
+- Clienți
+- Setări operaționale
+
+REGULI DE PRODUS ÎNGHEȚATE
+- Calendarul este home screen-ul real.
+- Vederea implicită este Zi.
+- Slotul minim este 15 minute.
+- Toate duratele sunt multipli de 15 minute.
+- Pacientul și clientul sunt entități separate.
+- Un client poate avea mai mulți pacienți.
+- În MVP, programarea și vizita sunt același obiect care își schimbă statusul.
+- Fiecare programare are un singur serviciu principal.
+- Blocările sunt distincte de programări.
+- Reprogramarea trebuie să păstreze istoricul.
+- Facturarea rămâne în Odoo/back-office în prima etapă.
+
+MENIUL PRINCIPAL CERUT
+- Calendar
+- Pacienți
+- Clienți
+- Setări
+
+DETALIU PE MODULE
+
+A. CALENDAR
+Creează un ecran principal de Calendar cu:
+- bară de sus: data curentă, Azi, Zi / Săptămână, filtre, căutare, Programare nouă
+- grilă verticală cu sloturi la 15 minute
+- coloane pe doctori
+- afișarea clară a programului doctorului
+- afișarea intervalelor inactive
+- afișarea blocărilor distinct de programări
+- afișarea programărilor cu status vizibil
+
+Acțiuni obligatorii din Calendar:
+- creare programare din slot liber
+- click pe programare pentru detaliu rapid
+- schimbare rapidă de status
+- mutare programare în alt slot / la alt doctor cu validare
+- anulare
+- reprogramare
+- intrare în fișa pacientului
+- adăugare blocare direct din calendar
+
+Filtre obligatorii:
+- doctor
+- status
+- serviciu
+
+Căutare obligatorie după:
+- pacient
+- client
+- telefon
+
+B. PACIENȚI
+Creează modulul Pacienți cu:
+- listă pacienți
+- fișă pacient
+
+Fișa pacientului trebuie să includă:
+- nume
+- specie
+- rasă
+- sex
+- data nașterii sau vârsta
+- microcip
+- sterilizat
+- proprietar asociat
+- telefon proprietar
+- email proprietar
+- alerte / observații importante
+- istoric programări / vizite
+- acțiune rapidă Programare nouă
+
+IMPORTANT:
+Nu transforma MVP-ul într-un dosar medical complex. Fișa pacientului trebuie să rămână operațională și simplă.
+
+C. CLIENȚI
+Creează modulul Clienți cu:
+- listă clienți
+- fișă client
+
+Fișa clientului trebuie să includă:
+- nume
+- telefon principal
+- telefon secundar, dacă există
+- email
+- adresă
+- observații scurte
+- lista pacienților asociați
+- istoric interacțiuni / programări
+- acțiuni rapide: Pacient nou, Programare nouă
+
+D. SERVICII
+Creează în Setări un catalog de servicii cu:
+- denumire
+- categorie
+- durată implicită
+- preț implicit
+- culoare
+- activ / inactiv
+- necesită doctor: da / nu
+- doctori eligibili
+
+Reguli:
+- duratele sunt multipli de 15 minute
+- schimbarea prețului serviciului nu trebuie să rescrie retroactiv istoricul vechi
+- serviciile inactive nu mai pot fi folosite în programări noi
+
+E. DOCTORI
+Creează în Setări un modul Doctori cu:
+- nume complet
+- nume scurt
+- specializare
+- culoare în calendar
+- activ / inactiv
+- program standard pe zile
+- servicii permise / eligibile
+
+Reguli:
+- doctorii inactivi păstrează istoricul
+- doctorii inactivi nu mai pot primi programări noi
+
+F. BLOCĂRI
+Creează un modul de Blocări cu:
+- concediu
+- pauză
+- training
+- indisponibilitate
+- blocare manuală
+- ședință
+
+Pentru fiecare blocare:
+- tip
+- început
+- sfârșit
+- doctor sau cabinet
+- motiv scurt
+- recurentă sau nu
+
+Reguli:
+- blocările bat programările la validare
+- dacă se creează o blocare peste programări deja existente, semnalează conflictul
+- blocările trebuie să poată fi adăugate și din Calendar, nu doar din Setări
+
+G. PROGRAMĂRI / VIZITE
+Definește obiectul central Programare/Vizită cu câmpuri:
+- pacient
+- client
+- doctor
+- serviciu
+- dată
+- oră început
+- durată
+- status
+- observații scurte
+- sursă programare
+- urgent sau nu
+
+Statusuri obligatorii:
+- Programat
+- Confirmat
+- Sosit
+- În consult
+- Finalizat
+- Anulat
+- Neprezentat
+- Reprogramat
+
+Tranziții:
+- flux normal: Programat → Confirmat → Sosit → În consult → Finalizat
+- alternativ: Programat / Confirmat → Anulat
+- alternativ: Programat / Confirmat → Neprezentat
+- alternativ: Programat / Confirmat → Reprogramat
+
+VALIDĂRI OBLIGATORII
+- nu se poate salva fără pacient, client, doctor, serviciu, interval
+- doctorul nu poate avea două programări simultane
+- nu se poate programa peste blocări
+- nu se poate programa în afara programului doctorului
+- durata trebuie să încapă integral în intervalul liber
+- serviciul trebuie să fie compatibil cu doctorul
+
+SCOPE
+Livrează strict MVP-ul. Nu intra acum în:
+- dosar medical complex
+- resurse / săli complexe
+- rotații automate
+- reminders SMS / WhatsApp sofisticate
+- portal client complex
+- raportare avansată
+- facturare completă în frontul custom
+
+CE VREAU DE LA TINE
+1. Analizează structura actuală a proiectului și spune unde trebuie pus fiecare modul.
+2. Propune o arhitectură clară pentru:
+   - modele
+   - servicii / logică
+   - pagini / ecrane
+   - componente UI
+   - validări
+3. Confirmă explicit ce rămâne în Odoo și ce este implementat în interfața custom.
+4. Creează un plan de implementare pe pași, în ordinea corectă.
+5. Implementează MVP-ul fără improvizații și fără funcții extra necerute.
+6. La final, generează:
+   - structură de fișiere actualizată
+   - listă scurtă de decizii tehnice
+   - listă de lucruri amânate pentru faza 2
+   - checklist de testare pentru fluxurile principale
+
+IMPORTANT
+- Nu rescrie tot Odoo.
+- Nu transforma produsul într-un ERP generic.
+- Optimizează pentru recepție și operare rapidă.
+- Păstrează UI-ul curat și orientat pe productivitate.
+- Când ai dubii între “mai mult” și “mai simplu”, alege varianta mai simplă, dar corectă.

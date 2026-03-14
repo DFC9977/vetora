@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Main Vetora menu -->
+    <menuitem
+        id="menu_vetora_root"
+        name="Vetora"
+        sequence="10"
+    />
+
+    <menuitem
+        id="menu_vetora_clinic"
+        name="Clinic"
+        parent="menu_vetora_root"
+        sequence="10"
+    />
+
+    <!-- Patients menu -->
+    <record id="action_vet_pet" model="ir.actions.act_window">
+        <field name="name">Patients</field>
+        <field name="res_model">vet.pet</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create and manage veterinary patients.
+            </p>
+        </field>
+    </record>
+
+    <menuitem
+        id="menu_vet_pet"
+        name="Patients"
+        parent="menu_vetora_clinic"
+        action="action_vet_pet"
+        sequence="10"
+    />
+
+    <!-- Visits menu -->
+    <record id="action_vet_visit" model="ir.actions.act_window">
+        <field name="name">Visits</field>
+        <field name="res_model">vet.visit</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create and manage veterinary visits.
+            </p>
+        </field>
+    </record>
+
+    <menuitem
+        id="menu_vet_visit"
+        name="Visits"
+        parent="menu_vetora_clinic"
+        action="action_vet_visit"
+        sequence="20"
+    />
+
+    <!-- Configuration menu -->
+    <menuitem
+        id="menu_vetora_config"
+        name="Configuration"
+        parent="menu_vetora_root"
+        sequence="90"
+    />
+
+    <!-- Services configuration -->
+    <record id="action_vet_service" model="ir.actions.act_window">
+        <field name="name">Services</field>
+        <field name="res_model">vet.service</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_service"
+        name="Services"
+        parent="menu_vetora_config"
+        action="action_vet_service"
+        sequence="10"
+    />
+
+    <!-- Doctors configuration -->
+    <record id="action_vet_doctor" model="ir.actions.act_window">
+        <field name="name">Doctors</field>
+        <field name="res_model">vet.doctor</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_doctor"
+        name="Doctors"
+        parent="menu_vetora_config"
+        action="action_vet_doctor"
+        sequence="20"
+    />
+
+    <!-- Locations configuration -->
+    <record id="action_vet_location" model="ir.actions.act_window">
+        <field name="name">Locations</field>
+        <field name="res_model">vet.location</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_location"
+        name="Locations"
+        parent="menu_vetora_config"
+        action="action_vet_location"
+        sequence="25"
+    />
+
+    <!-- Clinic schedule configuration -->
+    <record id="action_vet_schedule" model="ir.actions.act_window">
+        <field name="name">Clinic Schedule</field>
+        <field name="res_model">vet.schedule</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_schedule"
+        name="Clinic Schedule"
+        parent="menu_vetora_config"
+        action="action_vet_schedule"
+        sequence="30"
+    />
+
+    <!-- Doctor schedule configuration -->
+    <record id="action_vet_doctor_schedule" model="ir.actions.act_window">
+        <field name="name">Doctor Schedule</field>
+        <field name="res_model">vet.doctor.schedule</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_doctor_schedule"
+        name="Doctor Schedule"
+        parent="menu_vetora_config"
+        action="action_vet_doctor_schedule"
+        sequence="40"
+    />
+
+    <!-- Blocks configuration -->
+    <record id="action_vet_block" model="ir.actions.act_window">
+        <field name="name">Blocks</field>
+        <field name="res_model">vet.block</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem
+        id="menu_vet_block"
+        name="Blocks"
+        parent="menu_vetora_config"
+        action="action_vet_block"
+        sequence="50"
+    />
+
+</odoo>
+
