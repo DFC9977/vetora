@@ -279,6 +279,7 @@ export default function CalendarPage() {
           slots={daySlots}
           doctors={visibleDoctors}
           visitsByDoctor={visitsByDoctor}
+          t={t}
           services={services}
           blocks={data.blocks || []}
           onTimeAxisClick={handleTimeAxisClick}
@@ -400,7 +401,7 @@ function CalendarToolbar(props: ToolbarProps) {
         </div>
         <button
           onClick={props.onNewVisit}
-          className="bg-sky-600 text-white text-sm"
+          className="rounded border border-[#875A7B] bg-[#875A7B] text-white text-sm hover:bg-[#704878]"
         >
           {props.t("calendarDay.newVisit")}
         </button>
@@ -471,6 +472,7 @@ type GridProps = {
   doctors: VetDoctor[];
   visitsByDoctor: Map<number, VetVisit[]>;
   services: VetService[];
+  t: (key: string) => string;
   blocks: VetBlock[];
   onTimeAxisClick: (slot: Date) => void;
   onSlotClick: (doctor: VetDoctor, slot: Date) => void;
@@ -485,6 +487,7 @@ function CalendarGrid({
   doctors,
   visitsByDoctor,
   services,
+  t,
   blocks,
   onTimeAxisClick,
   onSlotClick,
@@ -502,6 +505,7 @@ function CalendarGrid({
             key={doctor.id}
             doctor={doctor}
             slots={slots}
+            t={t}
             visits={visitsByDoctor.get(doctor.id) || []}
             services={services}
             blocks={blocks.filter((b) => b.doctor_id === doctor.id)}
@@ -537,6 +541,7 @@ function TimeAxis({ slots, onSlotClick }: { slots: Date[]; onSlotClick?: (slot: 
 type DoctorColumnProps = {
   doctor: VetDoctor;
   slots: Date[];
+  t: (key: string) => string;
   visits: VetVisit[];
   services: VetService[];
   blocks: VetBlock[];
@@ -550,6 +555,7 @@ type DoctorColumnProps = {
 function DoctorColumn({
   doctor,
   slots,
+  t,
   visits,
   services,
   blocks,
@@ -628,6 +634,7 @@ function DoctorColumn({
             visit={visit}
             slots={slots}
             service={serviceById.get(visit.service_id) || null}
+            t={t}
             onClick={() => onVisitClick(visit)}
           />
         ))}
@@ -644,6 +651,7 @@ type NewVisitModalProps = {
 };
 type VisitCardProps = {
   visit: VetVisit;
+  t: (key: string) => string;
   slots: Date[];
   service: VetService | null;
   onClick: () => void;
@@ -654,7 +662,7 @@ type BlockCardProps = {
   onClick: () => void;
 };
 
-function VisitCard({ visit, slots, service, onClick }: VisitCardProps) {
+function VisitCard({ visit, slots, service, t, onClick }: VisitCardProps) {
   const start = parseOdooDatetime(visit.start_at);
   const end = parseOdooDatetime(visit.end_at);
   const durationMinutes = (end.getTime() - start.getTime()) / 60000;
@@ -677,14 +685,24 @@ function VisitCard({ visit, slots, service, onClick }: VisitCardProps) {
         onClick();
       }}
     >
-      <div className="flex justify-between">
-        <span className="font-semibold truncate">{visit.pet_name}</span>
-        <span className="ml-1 shrink-0">{formatTimeHM(start)}</span>
+      <div className="flex justify-between items-center">
+        <span className="truncate text-[11px]">
+          <span className="font-semibold">{t("visitDetail.patient")}:</span>{" "}
+          <span className="font-semibold">{visit.pet_name}</span>
+        </span>
+        <span className="ml-1 shrink-0 text-[11px]">{formatTimeHM(start)}</span>
       </div>
       <div className="truncate text-[11px]">
-        {visit.service_name}
+        <span className="font-semibold">{t("visitDetail.service")}:</span>{" "}
+        <span>{service?.name ?? visit.service_name}</span>
         {visit.is_urgent && <span className="ml-1 text-red-700 font-semibold">URGENT</span>}
       </div>
+      {visit.client_name && (
+        <div className="truncate text-[10px] text-slate-700">
+          <span className="font-semibold">{t("visitDetail.client")}:</span>{" "}
+          <span>{visit.client_name}</span>
+        </div>
+      )}
       <div className="text-[10px] uppercase text-slate-700 mt-0.5">{visit.status}</div>
     </div>
   );
@@ -742,4 +760,3 @@ function getStatusColor(status: string): { bg: string; border: string } {
       return { bg: "#e5e7eb", border: "#9ca3af" };
   }
 }
-
