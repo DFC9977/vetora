@@ -1,0 +1,15 @@
+services:
+  livrari:
+    build: .
+    container_name: vetora-livrari
+    restart: unless-stopped
+    # Only reachable from the server itself; the reverse proxy (nginx/Caddy) publishes app.vetora.ro.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data   # database (livrari.db) + uploaded PDFs: back this folder up
+    environment:
+      TZ: Europe/Bucharest
+      # Optional protection with a username/password (HTTP Basic). Leave empty = no login.
+      APP_USER: ""
+      APP_PASSWORD: ""

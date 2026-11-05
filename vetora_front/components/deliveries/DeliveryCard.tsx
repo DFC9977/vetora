@@ -7,6 +7,11 @@ import { mapApiErrorToMessage } from "../../lib/errors";
 import { formatMoney, formatQty, parseInputNumber } from "../../lib/goods";
 import { DeliveryBadge, RETURN_REASONS } from "./shared";
 
+function formatUtc(value: string) {
+  const d = new Date(value.replace(" ", "T") + (value.endsWith("Z") ? "" : "Z"));
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" });
+}
+
 type LineEdit = { id: number; return_qty: string; return_reason: ReturnReason | ""; delivery_note: string };
 
 function toEdits(inv: SupplierInvoice): LineEdit[] {
@@ -30,7 +35,7 @@ export function DeliveryCard({
   onRemoved: (id: number) => void;
 }) {
   const state = invoice.delivery_state || "pending";
-  const [expanded, setExpanded] = useState(state === "partial");
+  const [expanded, setExpanded] = useState(false);
   const [note, setNote] = useState(invoice.delivery_note || "");
   const [edits, setEdits] = useState<LineEdit[]>(toEdits(invoice));
   const [busy, setBusy] = useState(false);
@@ -59,7 +64,7 @@ export function DeliveryCard({
       return;
     }
     setEdits(toEdits(res.data));
-    if (res.data.delivery_state !== "partial") setExpanded(false);
+    setExpanded(false);
     onChanged(res.data);
   }
 
@@ -108,6 +113,7 @@ export function DeliveryCard({
         </div>
       </div>
 
+      <div className="overflow-auto">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="text-xs text-slate-500">
@@ -189,6 +195,7 @@ export function DeliveryCard({
           })}
         </tbody>
       </table>
+      </div>
 
       <textarea
         className="border rounded px-2 py-1 w-full text-sm"
@@ -231,7 +238,7 @@ export function DeliveryCard({
       </div>
       {invoice.delivered_at && state !== "pending" && (
         <div className="text-xs text-slate-500">
-          {t("deliveries.deliveredAt")}: {invoice.delivered_at.slice(0, 16)} UTC
+          {t("deliveries.deliveredAt")}: {formatUtc(invoice.delivered_at)}
         </div>
       )}
     </div>
