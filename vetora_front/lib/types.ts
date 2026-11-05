@@ -231,3 +231,89 @@ export type CalendarWeekData = {
   visits: VetVisit[];
 };
 
+
+// --- Supplier invoices / goods registry ---
+
+export type SupplierInvoiceLine = {
+  id?: number;
+  product_code: string | null;
+  product_name: string;
+  uom: string | null;
+  quantity: number;
+  price_unit: number;
+  vat_rate: number;
+  discount_amount: number;
+  amount?: number;
+  lot_number: string | null;
+  expiry_date: string | null;
+  catalog_id?: number | null;
+  catalog_code?: string | null;
+  producer?: string | null;
+};
+
+export type SupplierInvoice = {
+  id: number;
+  name: string | null;
+  supplier_name: string | null;
+  supplier_vat: string | null;
+  customer_name: string | null;
+  customer_vat: string | null;
+  invoice_date: string | null;
+  location_id: number | null;
+  location_name: string | null;
+  state: "draft" | "confirmed";
+  file_name: string | null;
+  has_file: boolean;
+  extraction_method: "text" | "ocr" | "manual" | "none";
+  amount_untaxed: number;
+  line_count: number;
+  notes: string | null;
+  lines?: SupplierInvoiceLine[];
+  raw_text?: string;
+};
+
+export type GoodsRegistryRow = {
+  product_key: string;
+  catalog_id: number | null;
+  product_code: string | null;
+  ean: string | null;
+  producer: string | null;
+  product_name: string;
+  uom: string | null;
+  total_quantity: number;
+  total_amount: number;
+  total_discount: number;
+  avg_price: number;
+  min_price: number;
+  max_price: number;
+  last_price: number;
+  last_date: string | null;
+  last_supplier: string | null;
+  invoice_count: number;
+  suppliers: string[];
+  customers: string[];
+};
+
+export type GoodsProducerSummary = {
+  producer: string | null;
+  products: number;
+  total_quantity: number;
+  total_amount: number;
+};
+
+export type GoodsRegistryData = {
+  rows: GoodsRegistryRow[];
+  by_producer: GoodsProducerSummary[];
+  totals: { products: number; quantity: number; amount: number; invoices: number; unmatched: number };
+};
+
+export type GoodsCatalogProduct = {
+  id: number;
+  name: string;
+  internal_code: string | null;
+  ean: string | null;
+  producer: string | null;
+  price: number;
+  vat_rate: number;
+  hs_code: string | null;
+};

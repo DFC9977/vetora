@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/calendar", key: "nav.calendar" },
   { href: "/patients", key: "nav.patients" },
   { href: "/clients", key: "nav.clients" },
+  { href: "/goods", key: "nav.goods" },
   { href: "/settings", key: "nav.settings" },
 ];
 

@@ -7,3 +7,5 @@ from . import vet_schedule
 from . import vet_block
 from . import vet_location
 
+from . import vet_goods_product
+from . import vet_supplier_invoice

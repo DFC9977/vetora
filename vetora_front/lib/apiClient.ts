@@ -13,6 +13,10 @@ import {
   DoctorSettings,
   ServiceSettings,
   VetBlock,
+  SupplierInvoice,
+  SupplierInvoiceLine,
+  GoodsRegistryData,
+  GoodsCatalogProduct,
 } from "./types";
 
 // Always call the local Next.js API proxy, which forwards to Odoo.
@@ -290,5 +294,68 @@ export const api = {
   deleteBlock(payload: { block_id: number }) {
     return requestJson<boolean>("/vetora/json/block/delete", payload);
   },
-};
+  // Supplier invoices / goods registry
+  uploadSupplierInvoice(payload: { file_base64: string; file_name: string; location_id?: number | null }) {
+    return requestJson<SupplierInvoice>("/vetora/json/supplier_invoice/upload", payload);
+  },
 
+  listSupplierInvoices(payload: {
+    state?: "draft" | "confirmed";
+    supplier?: string;
+    customer?: string;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    return requestJson<{ invoices: SupplierInvoice[] }>("/vetora/json/supplier_invoice/list", payload);
+  },
+
+  getSupplierInvoice(payload: { invoice_id: number }) {
+    return requestJson<SupplierInvoice>("/vetora/json/supplier_invoice/get", payload);
+  },
+
+  saveSupplierInvoice(payload: {
+    invoice: {
+      id?: number;
+      name?: string | null;
+      supplier_name?: string | null;
+      supplier_vat?: string | null;
+      customer_name?: string | null;
+      customer_vat?: string | null;
+      invoice_date?: string | null;
+      notes?: string | null;
+      lines?: SupplierInvoiceLine[];
+    };
+  }) {
+    return requestJson<SupplierInvoice>("/vetora/json/supplier_invoice/save", payload);
+  },
+
+  supplierInvoiceAction(payload: { invoice_id: number; action: "confirm" | "reset_draft" | "reextract" | "delete" }) {
+    return requestJson<SupplierInvoice & { deleted?: boolean }>("/vetora/json/supplier_invoice/action", payload);
+  },
+
+  getSupplierInvoiceFile(payload: { invoice_id: number }) {
+    return requestJson<{ file_name: string; file_base64: string }>("/vetora/json/supplier_invoice/file", payload);
+  },
+
+  goodsRegistry(payload: {
+    date_from?: string;
+    date_to?: string;
+    supplier?: string;
+    customer?: string;
+    producer?: string;
+    product?: string;
+  }) {
+    return requestJson<GoodsRegistryData>("/vetora/json/goods_registry", payload);
+  },
+
+  importGoodsCatalog(payload: { file_base64: string; file_name?: string }) {
+    return requestJson<{ created: number; updated: number; skipped: number; rematched_lines: number }>(
+      "/vetora/json/goods_catalog/import",
+      payload,
+    );
+  },
+
+  listGoodsCatalog(payload: { query?: string; limit?: number }) {
+    return requestJson<{ total: number; products: GoodsCatalogProduct[] }>("/vetora/json/goods_catalog/list", payload);
+  },
+};

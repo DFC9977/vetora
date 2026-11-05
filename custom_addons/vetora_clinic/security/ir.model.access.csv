@@ -9,3 +9,6 @@ access_vet_doctor_schedule_user,access_vet_doctor_schedule_user,model_vet_doctor
 access_vet_block_user,access_vet_block_user,model_vet_block,base.group_system,1,1,1,1
 access_vet_location_user,access_vet_location_user,model_vet_location,base.group_system,1,1,1,1
 
+access_vet_supplier_invoice_user,access_vet_supplier_invoice_user,model_vet_supplier_invoice,base.group_user,1,1,1,1
+access_vet_supplier_invoice_line_user,access_vet_supplier_invoice_line_user,model_vet_supplier_invoice_line,base.group_user,1,1,1,1
+access_vet_goods_product_user,access_vet_goods_product_user,model_vet_goods_product,base.group_user,1,1,1,1

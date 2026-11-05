@@ -1,3 +1,5 @@
+import base64
+import binascii
 import logging
 from datetime import datetime, timedelta
 
@@ -199,6 +201,91 @@ def _json_payload():
         if isinstance(p, dict):
             return p
     return body
+
+
+SUPPLIER_INVOICE_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _to_float(value):
+    if value in (None, "", False):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(" ", "").replace(",", "."))
+    except ValueError:
+        return 0.0
+
+
+def _get_supplier_invoice(payload):
+    try:
+        inv_id = int(payload.get("invoice_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not inv_id:
+        return None
+    invoice = request.env["vet.supplier.invoice"].browse(inv_id).exists()
+    return invoice or None
+
+
+def _supplier_invoice_domain(env, payload):
+    """Common filters for supplier invoices and their lines (same field names on both models)."""
+    domain = [("company_id", "=", payload.get("company_id") or env.company.id)]
+    if payload.get("date_from"):
+        domain.append(("invoice_date", ">=", payload["date_from"]))
+    if payload.get("date_to"):
+        domain.append(("invoice_date", "<=", payload["date_to"]))
+    if payload.get("location_id"):
+        domain.append(("location_id", "=", int(payload["location_id"])))
+    supplier = (payload.get("supplier") or "").strip()
+    if supplier:
+        domain.append(("supplier_name", "ilike", supplier))
+    customer = (payload.get("customer") or "").strip()
+    if customer:
+        domain.append(("customer_name", "ilike", customer))
+    return domain
+
+
+def _serialize_supplier_invoice(inv, with_lines=False):
+    data = {
+        "id": inv.id,
+        "name": inv.name or None,
+        "supplier_name": inv.supplier_name or None,
+        "supplier_vat": inv.supplier_vat or None,
+        "customer_name": inv.customer_name or None,
+        "customer_vat": inv.customer_vat or None,
+        "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
+        "location_id": inv.location_id.id if inv.location_id else None,
+        "location_name": inv.location_id.name if inv.location_id else None,
+        "state": inv.state,
+        "file_name": inv.file_name or None,
+        "has_file": bool(inv.file_data),
+        "extraction_method": inv.extraction_method,
+        "amount_untaxed": inv.amount_untaxed,
+        "line_count": inv.line_count,
+        "notes": inv.notes or None,
+    }
+    if with_lines:
+        data["lines"] = [
+            {
+                "id": ln.id,
+                "product_code": ln.product_code or None,
+                "product_name": ln.product_name,
+                "uom": ln.uom or None,
+                "quantity": ln.quantity,
+                "price_unit": ln.price_unit,
+                "vat_rate": ln.vat_rate,
+                "discount_amount": ln.discount_amount,
+                "amount": ln.amount,
+                "lot_number": ln.lot_number or None,
+                "expiry_date": str(ln.expiry_date) if ln.expiry_date else None,
+                "catalog_id": ln.catalog_id.id if ln.catalog_id else None,
+                "catalog_code": ln.catalog_id.internal_code if ln.catalog_id else None,
+                "producer": ln.catalog_id.producer if ln.catalog_id else None,
+            }
+            for ln in inv.line_ids
+        ]
+    return data
 
 
 class VetoraApiController(http.Controller):
@@ -1474,3 +1561,280 @@ class VetoraApiController(http.Controller):
         }
         return _json_ok(data)
 
+
+    # --- Supplier invoices / goods registry ---
+
+    @http.route("/vetora/json/supplier_invoice/upload", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_upload(self, **kwargs):
+        """Create a draft supplier invoice from an uploaded PDF/image (base64) and extract its lines."""
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        file_b64 = payload.get("file_base64") or ""
+        file_name = (payload.get("file_name") or "").strip() or "factura"
+        if not file_b64:
+            return _json_error("MISSING_FIELDS", "Field 'file_base64' is required.", {"fields": ["file_base64"]})
+        if "," in file_b64[:100] and file_b64.startswith("data:"):
+            file_b64 = file_b64.split(",", 1)[1]
+        try:
+            file_bytes = base64.b64decode(file_b64, validate=False)
+        except (binascii.Error, ValueError):
+            return _json_error("INVALID_FILE", "File content is not valid base64.")
+        if len(file_bytes) > SUPPLIER_INVOICE_MAX_BYTES:
+            return _json_error("FILE_TOO_LARGE", "File is larger than 15 MB.")
+        location_id = payload.get("location_id")
+        try:
+            invoice = env["vet.supplier.invoice"].create_from_file(
+                file_bytes, file_name, location_id=int(location_id) if location_id else False
+            )
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok(_serialize_supplier_invoice(invoice, with_lines=True))
+
+    @http.route("/vetora/json/supplier_invoice/list", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_list(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        domain = _supplier_invoice_domain(env, payload)
+        if payload.get("state") in ("draft", "confirmed"):
+            domain.append(("state", "=", payload["state"]))
+        invoices = env["vet.supplier.invoice"].search(domain, limit=int(payload.get("limit") or 200))
+        return _json_ok({"invoices": [_serialize_supplier_invoice(inv) for inv in invoices]})
+
+    @http.route("/vetora/json/supplier_invoice/get", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_get(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        invoice = _get_supplier_invoice(payload)
+        if not invoice:
+            return _json_error("NOT_FOUND", "Invoice not found.", {"id": payload.get("invoice_id")}, http_status=404)
+        data = _serialize_supplier_invoice(invoice, with_lines=True)
+        data["raw_text"] = invoice.raw_text or ""
+        return _json_ok(data)
+
+    @http.route("/vetora/json/supplier_invoice/save", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_save(self, **kwargs):
+        """Save header fields and replace all lines of a draft invoice (manual review)."""
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        vals_in = payload.get("invoice") or {}
+        Invoice = env["vet.supplier.invoice"]
+        invoice = _get_supplier_invoice({"invoice_id": vals_in.get("id")}) if vals_in.get("id") else Invoice
+        if vals_in.get("id") and not invoice:
+            return _json_error("NOT_FOUND", "Invoice not found.", {"id": vals_in.get("id")}, http_status=404)
+        vals = {}
+        for key in ("name", "supplier_name", "supplier_vat", "customer_name", "customer_vat", "invoice_date", "notes"):
+            if key in vals_in:
+                vals[key] = (vals_in.get(key) or "").strip() or False
+        if "location_id" in vals_in:
+            vals["location_id"] = int(vals_in["location_id"]) if vals_in.get("location_id") else False
+        if "lines" in vals_in:
+            commands = [(5, 0, 0)]
+            for i, ln in enumerate(vals_in.get("lines") or []):
+                name = (ln.get("product_name") or "").strip()
+                if not name:
+                    continue
+                commands.append((0, 0, {
+                    "sequence": (i + 1) * 10,
+                    "product_code": (ln.get("product_code") or "").strip() or False,
+                    "product_name": name,
+                    "uom": (ln.get("uom") or "").strip() or False,
+                    "quantity": _to_float(ln.get("quantity")),
+                    "price_unit": _to_float(ln.get("price_unit")),
+                    "vat_rate": _to_float(ln.get("vat_rate")),
+                    "discount_amount": _to_float(ln.get("discount_amount")),
+                    "lot_number": (ln.get("lot_number") or "").strip() or False,
+                    "expiry_date": ln.get("expiry_date") or False,
+                }))
+            vals["line_ids"] = commands
+        try:
+            if invoice:
+                invoice._check_draft()
+                invoice.write(vals)
+            else:
+                vals.setdefault("extraction_method", "manual")
+                invoice = Invoice.create(vals)
+            if "line_ids" in vals:
+                invoice.line_ids.action_match_catalog()
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok(_serialize_supplier_invoice(invoice, with_lines=True))
+
+    @http.route("/vetora/json/supplier_invoice/action", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_action(self, **kwargs):
+        """Run a workflow action: confirm | reset_draft | reextract | delete."""
+        payload = {**_json_payload(), **kwargs}
+        invoice = _get_supplier_invoice(payload)
+        if not invoice:
+            return _json_error("NOT_FOUND", "Invoice not found.", {"id": payload.get("invoice_id")}, http_status=404)
+        action = payload.get("action")
+        try:
+            if action == "confirm":
+                invoice.action_confirm()
+            elif action == "reset_draft":
+                invoice.action_reset_draft()
+            elif action == "reextract":
+                invoice.action_reextract()
+            elif action == "delete":
+                invoice.unlink()
+                return _json_ok({"deleted": True})
+            else:
+                return _json_error("INVALID_ACTION", "Unknown action.", {"action": action})
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok(_serialize_supplier_invoice(invoice, with_lines=True))
+
+    @http.route("/vetora/json/supplier_invoice/file", type="json", auth="user", methods=["POST"])
+    def supplier_invoice_file(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        invoice = _get_supplier_invoice(payload)
+        if not invoice or not invoice.file_data:
+            return _json_error("NOT_FOUND", "File not found.", http_status=404)
+        return _json_ok({
+            "file_name": invoice.file_name,
+            "file_base64": invoice.file_data.decode() if isinstance(invoice.file_data, bytes) else invoice.file_data,
+        })
+
+    @http.route("/vetora/json/goods_registry", type="json", auth="user", methods=["POST"])
+    def goods_registry(self, **kwargs):
+        """Central goods registry: confirmed invoice lines aggregated per product.
+
+        Lines matched to the catalog are grouped by catalog product; the others by
+        normalized code/name. Also returns a per-producer summary.
+        Filters: date_from, date_to, location_id, supplier, customer, producer, product.
+        """
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        domain = _supplier_invoice_domain(env, payload)
+        domain.append(("state", "=", "confirmed"))
+        product_q = (payload.get("product") or "").strip()
+        if product_q:
+            domain += ["|", "|", ("product_name", "ilike", product_q), ("product_code", "ilike", product_q),
+                       ("catalog_id.internal_code", "ilike", product_q)]
+        producer_q = (payload.get("producer") or "").strip()
+        if producer_q:
+            domain.append(("producer", "ilike", producer_q))
+        lines = env["vet.supplier.invoice.line"].search(domain, order="invoice_date asc, id asc")
+
+        rows = {}
+        for ln in lines:
+            key = f"cat:{ln.catalog_id.id}" if ln.catalog_id else ln.product_key
+            row = rows.get(key)
+            if row is None:
+                row = rows[key] = {
+                    "product_key": key,
+                    "catalog_id": ln.catalog_id.id if ln.catalog_id else None,
+                    "product_code": ln.catalog_id.internal_code if ln.catalog_id else (ln.product_code or None),
+                    "ean": ln.catalog_id.ean if ln.catalog_id else None,
+                    "producer": ln.catalog_id.producer if ln.catalog_id else None,
+                    "product_name": ln.catalog_id.name if ln.catalog_id else ln.product_name,
+                    "uom": ln.uom or None,
+                    "total_quantity": 0.0,
+                    "total_amount": 0.0,
+                    "total_discount": 0.0,
+                    "invoice_ids": set(),
+                    "suppliers": set(),
+                    "customers": set(),
+                    "min_price": None,
+                    "max_price": None,
+                }
+            row["total_quantity"] += ln.quantity
+            row["total_amount"] += ln.amount
+            row["total_discount"] += ln.discount_amount
+            row["invoice_ids"].add(ln.invoice_id.id)
+            if ln.supplier_name:
+                row["suppliers"].add(ln.supplier_name)
+            if ln.customer_name:
+                row["customers"].add(ln.customer_name)
+            row["min_price"] = ln.price_unit if row["min_price"] is None else min(row["min_price"], ln.price_unit)
+            row["max_price"] = ln.price_unit if row["max_price"] is None else max(row["max_price"], ln.price_unit)
+            # lines are ordered by date: the last one seen is the latest
+            row["last_price"] = ln.price_unit
+            row["last_date"] = str(ln.invoice_date) if ln.invoice_date else None
+            row["last_supplier"] = ln.supplier_name or None
+            if not ln.catalog_id:
+                row["product_name"] = ln.product_name
+            row["uom"] = ln.uom or row["uom"]
+
+        result = []
+        producers = {}
+        for row in rows.values():
+            qty = row["total_quantity"]
+            row["avg_price"] = round(row["total_amount"] / qty, 4) if qty else 0.0
+            row["total_amount"] = round(row["total_amount"], 2)
+            row["total_discount"] = round(row["total_discount"], 2)
+            row["invoice_count"] = len(row.pop("invoice_ids"))
+            row["suppliers"] = sorted(row["suppliers"])
+            row["customers"] = sorted(row["customers"])
+            result.append(row)
+            pkey = row["producer"] or ""
+            prod = producers.setdefault(pkey, {"producer": row["producer"], "products": 0, "total_quantity": 0.0, "total_amount": 0.0})
+            prod["products"] += 1
+            prod["total_quantity"] += qty
+            prod["total_amount"] = round(prod["total_amount"] + row["total_amount"], 2)
+        result.sort(key=lambda r: ((r["producer"] or "~").lower(), r["product_name"].lower()))
+        by_producer = sorted(producers.values(), key=lambda p: -p["total_amount"])
+        return _json_ok({
+            "rows": result,
+            "by_producer": by_producer,
+            "totals": {
+                "products": len(result),
+                "quantity": sum(r["total_quantity"] for r in result),
+                "amount": round(sum(r["total_amount"] for r in result), 2),
+                "invoices": len(set(lines.mapped("invoice_id").ids)),
+                "unmatched": sum(1 for r in result if not r["catalog_id"]),
+            },
+        })
+
+    # --- Goods catalog ---
+
+    @http.route("/vetora/json/goods_catalog/import", type="json", auth="user", methods=["POST"])
+    def goods_catalog_import(self, **kwargs):
+        """Import/update the product catalog from an Excel price list (base64), then re-match draft lines."""
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        file_b64 = payload.get("file_base64") or ""
+        if not file_b64:
+            return _json_error("MISSING_FIELDS", "Field 'file_base64' is required.", {"fields": ["file_base64"]})
+        try:
+            file_bytes = base64.b64decode(file_b64.split(",", 1)[1] if file_b64.startswith("data:") else file_b64)
+        except (binascii.Error, ValueError):
+            return _json_error("INVALID_FILE", "File content is not valid base64.")
+        if len(file_bytes) > SUPPLIER_INVOICE_MAX_BYTES:
+            return _json_error("FILE_TOO_LARGE", "File is larger than 15 MB.")
+        try:
+            counters = env["vet.goods.product"].import_xlsx(file_bytes)
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        # Re-match all lines of the company (catalog changed).
+        lines = env["vet.supplier.invoice.line"].search([("company_id", "=", env.company.id)])
+        lines.action_match_catalog()
+        counters["rematched_lines"] = len(lines.filtered("catalog_id"))
+        return _json_ok(counters)
+
+    @http.route("/vetora/json/goods_catalog/list", type="json", auth="user", methods=["POST"])
+    def goods_catalog_list(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        domain = [("company_id", "=", env.company.id)]
+        query = (payload.get("query") or "").strip()
+        if query:
+            domain += ["|", "|", "|", ("name", "ilike", query), ("internal_code", "ilike", query),
+                       ("ean", "ilike", query), ("producer", "ilike", query)]
+        Product = env["vet.goods.product"]
+        limit = min(int(payload.get("limit") or 200), 1000)
+        products = Product.search(domain, limit=limit)
+        return _json_ok({
+            "total": Product.search_count(domain),
+            "products": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "internal_code": p.internal_code or None,
+                    "ean": p.ean or None,
+                    "producer": p.producer or None,
+                    "price": p.price,
+                    "vat_rate": p.vat_rate,
+                    "hs_code": p.hs_code or None,
+                }
+                for p in products
+            ],
+        })
