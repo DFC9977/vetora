@@ -9,3 +9,4 @@ from . import vet_location
 
 from . import vet_goods_product
 from . import vet_supplier_invoice
+from . import vet_delivery_run

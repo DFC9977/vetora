@@ -48,8 +48,8 @@ export function downloadBase64(base64: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export function downloadCsv(rows: (string | number | null)[][], fileName: string) {
-  const esc = (v: string | number | null) => {
+export function downloadCsv(rows: (string | number | null | undefined)[][], fileName: string) {
+  const esc = (v: string | number | null | undefined) => {
     const s = v === null || v === undefined ? "" : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };

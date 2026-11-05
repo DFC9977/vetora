@@ -22,6 +22,24 @@ class VetSupplierInvoice(models.Model):
     supplier_vat = fields.Char(string="Supplier VAT / CUI")
     customer_name = fields.Char(string="Customer")
     customer_vat = fields.Char(string="Customer VAT / CUI")
+    customer_phone = fields.Char(string="Customer Phone")
+    delivery_address = fields.Char(string="Delivery Address")
+
+    # --- Delivery tracking ---
+    run_id = fields.Many2one("vet.delivery.run", string="Delivery Run", index=True, ondelete="set null")
+    delivery_state = fields.Selection(
+        [
+            ("pending", "To deliver"),
+            ("delivered", "Delivered"),
+            ("partial", "Partially delivered"),
+            ("not_delivered", "Not delivered"),
+        ],
+        default="pending",
+        required=True,
+        index=True,
+    )
+    delivered_at = fields.Datetime(string="Delivered At")
+    delivery_note = fields.Text(string="Delivery Note")
     invoice_date = fields.Date(string="Invoice Date")
     location_id = fields.Many2one("vet.location", string="Location")
     company_id = fields.Many2one(
@@ -88,17 +106,20 @@ class VetSupplierInvoice(models.Model):
             ("supplier_vat", "supplier_vat"),
             ("customer_name", "customer_name"),
             ("customer_vat", "customer_vat"),
+            ("customer_phone", "customer_phone"),
+            ("delivery_address", "delivery_address"),
         ):
             if parsed.get(key):
                 vals[field] = parsed[key]
         return vals
 
     @api.model
-    def create_from_file(self, file_bytes, file_name, location_id=False):
+    def create_from_file(self, file_bytes, file_name, location_id=False, run_id=False):
         vals = {
             "file_data": base64.b64encode(file_bytes),
             "file_name": file_name,
             "location_id": location_id or False,
+            "run_id": run_id or False,
         }
         vals.update(self._extraction_vals(file_bytes, file_name))
         invoice = self.create(vals)
@@ -145,6 +166,61 @@ class VetSupplierInvoice(models.Model):
                 raise ValidationError(_("Duplicate invoice: this supplier invoice number is already confirmed."))
         self.write({"state": "confirmed"})
 
+    def _find_duplicates(self):
+        """Other invoices with the same number and issuer (any state)."""
+        self.ensure_one()
+        if not self.name:
+            return self.browse()
+        domain = [
+            ("id", "!=", self.id),
+            ("company_id", "=", self.company_id.id),
+            ("name", "=ilike", self.name),
+        ]
+        if self.supplier_name:
+            domain.append(("supplier_name", "=ilike", self.supplier_name))
+        return self.search(domain)
+
+    def action_set_delivery(self, state, note=None, lines=None):
+        """Record the delivery result.
+
+        state: pending | delivered | not_delivered | partial
+        lines (for partial): list of {id, return_qty, return_reason, delivery_note}
+        For 'partial' the final state is derived from the line quantities.
+        """
+        valid = dict(self._fields["delivery_state"].selection)
+        if state not in valid:
+            raise ValidationError(_("Invalid delivery state."))
+        for inv in self:
+            if state in ("pending", "delivered"):
+                inv.line_ids.write({"return_qty": 0.0, "return_reason": False})
+            elif state == "not_delivered":
+                for line in inv.line_ids:
+                    line.write({"return_qty": line.quantity, "return_reason": line.return_reason or "refused"})
+            if lines:
+                by_id = {ln.id: ln for ln in inv.line_ids}
+                for vals in lines:
+                    line = by_id.get(int(vals.get("id") or 0))
+                    if not line:
+                        continue
+                    upd = {}
+                    if "return_qty" in vals and state == "partial":
+                        upd["return_qty"] = float(vals.get("return_qty") or 0.0)
+                    if "return_reason" in vals:
+                        upd["return_reason"] = vals.get("return_reason") or False
+                    if "delivery_note" in vals:
+                        upd["delivery_note"] = (vals.get("delivery_note") or "").strip() or False
+                    if upd:
+                        line.write(upd)
+            final = state
+            if state == "partial":
+                returned = sum(inv.line_ids.mapped("return_qty"))
+                total = sum(inv.line_ids.mapped("quantity"))
+                final = "delivered" if returned <= 0 else ("not_delivered" if returned >= total else "partial")
+            vals = {"delivery_state": final, "delivered_at": False if final == "pending" else fields.Datetime.now()}
+            if note is not None:
+                vals["delivery_note"] = (note or "").strip() or False
+            inv.write(vals)
+
     def action_reset_draft(self):
         self.write({"state": "draft"})
 
@@ -178,6 +254,19 @@ class VetSupplierInvoiceLine(models.Model):
     amount = fields.Float(string="Net Value (excl. VAT)", compute="_compute_amount", store=True)
     lot_number = fields.Char(string="Lot")
     expiry_date = fields.Date(string="Expiry")
+    return_qty = fields.Float(string="Returned / Not Delivered Qty", default=0.0)
+    return_reason = fields.Selection(
+        [
+            ("refused", "Refused by customer"),
+            ("damaged", "Damaged"),
+            ("missing", "Missing at loading"),
+            ("wrong", "Wrong product"),
+            ("other", "Other"),
+        ],
+        string="Return Reason",
+    )
+    delivered_qty = fields.Float(string="Delivered Qty", compute="_compute_delivered_qty", store=True)
+    delivery_note = fields.Char(string="Delivery Note")
     catalog_id = fields.Many2one("vet.goods.product", string="Catalog Product", index=True, ondelete="set null")
     producer = fields.Char(related="catalog_id.producer", store=True, index=True)
 
@@ -199,6 +288,17 @@ class VetSupplierInvoiceLine(models.Model):
     def _compute_amount(self):
         for line in self:
             line.amount = round((line.quantity or 0.0) * (line.price_unit or 0.0) - (line.discount_amount or 0.0), 2)
+
+    @api.depends("quantity", "return_qty")
+    def _compute_delivered_qty(self):
+        for line in self:
+            line.delivered_qty = (line.quantity or 0.0) - (line.return_qty or 0.0)
+
+    @api.constrains("quantity", "return_qty")
+    def _check_return_qty(self):
+        for line in self:
+            if line.return_qty < 0 or line.return_qty > max(line.quantity, 0.0) + 1e-6:
+                raise ValidationError(_("Returned quantity must be between 0 and the invoiced quantity."))
 
     def action_match_catalog(self):
         """Link lines to the imported product catalog (code/EAN, exact name, then fuzzy name)."""

@@ -371,6 +371,31 @@ def _parse_header(text, lines, result):
                 result["customer_name"] = buyer[:128]
                 break
 
+    # Delivery address ("Livrare:"), falling back to the buyer's registered office (right column "Sediul:").
+    for ln in lines:
+        lm = re.search(r"Livrare\s*[:.]\s*(.+)$", ln, re.IGNORECASE)
+        if lm:
+            addr = _first_column(lm.group(1)).strip(" ,")
+            if _has_letters(addr) and addr.upper() != "ROMANIA":
+                result["delivery_address"] = addr[:200]
+                break
+    if not result["delivery_address"]:
+        for ln in lines:
+            for sm in re.finditer(r"Sediul\s*[:.]\s*(.+?)(?=\s{3,}|$)", ln, re.IGNORECASE):
+                if sm.start() > 40:  # right column = buyer
+                    result["delivery_address"] = sm.group(1).strip(" ,")[:200]
+                    break
+            if result["delivery_address"]:
+                break
+    # Buyer phone: a "Telefon:" printed in the right column.
+    for ln in lines:
+        for pm in re.finditer(r"Telefon\s*[:.]\s*(\+?\d[\d ./-]{7,}\d)", ln, re.IGNORECASE):
+            if pm.start() > 40:
+                result["customer_phone"] = pm.group(1).strip()
+                break
+        if result["customer_phone"]:
+            break
+
     vm = _VAT_DEFAULT_RE.search(text)
     if vm:
         result["default_vat_rate"] = float(vm.group(1))
@@ -391,6 +416,8 @@ def parse_invoice_text(text):
         "supplier_vat": None,
         "customer_name": None,
         "customer_vat": None,
+        "delivery_address": None,
+        "customer_phone": None,
         "default_vat_rate": None,
         "lines": [],
     }

@@ -254,6 +254,13 @@ def _serialize_supplier_invoice(inv, with_lines=False):
         "supplier_vat": inv.supplier_vat or None,
         "customer_name": inv.customer_name or None,
         "customer_vat": inv.customer_vat or None,
+        "customer_phone": inv.customer_phone or None,
+        "delivery_address": inv.delivery_address or None,
+        "run_id": inv.run_id.id if inv.run_id else None,
+        "run_name": inv.run_id.name if inv.run_id else None,
+        "delivery_state": inv.delivery_state,
+        "delivered_at": fields.Datetime.to_string(inv.delivered_at) if inv.delivered_at else None,
+        "delivery_note": inv.delivery_note or None,
         "invoice_date": str(inv.invoice_date) if inv.invoice_date else None,
         "location_id": inv.location_id.id if inv.location_id else None,
         "location_name": inv.location_id.name if inv.location_id else None,
@@ -282,11 +289,81 @@ def _serialize_supplier_invoice(inv, with_lines=False):
                 "catalog_id": ln.catalog_id.id if ln.catalog_id else None,
                 "catalog_code": ln.catalog_id.internal_code if ln.catalog_id else None,
                 "producer": ln.catalog_id.producer if ln.catalog_id else None,
+                "return_qty": ln.return_qty,
+                "delivered_qty": ln.delivered_qty,
+                "return_reason": ln.return_reason or None,
+                "delivery_note": ln.delivery_note or None,
             }
             for ln in inv.line_ids
         ]
     return data
 
+
+
+def _serialize_run(run):
+    return {
+        "id": run.id,
+        "name": run.name,
+        "date": str(run.date) if run.date else None,
+        "driver": run.driver or None,
+        "vehicle": run.vehicle or None,
+        "notes": run.notes or None,
+        "state": run.state,
+        "invoice_count": run.invoice_count,
+        "pending_count": run.pending_count,
+        "delivered_count": run.delivered_count,
+        "partial_count": run.partial_count,
+        "not_delivered_count": run.not_delivered_count,
+        "amount_total": round(run.amount_total, 2),
+    }
+
+
+def _aggregate_delivery_goods(invoices):
+    """Per-product totals for a set of invoices: loaded (invoiced), delivered and returned quantities,
+    with the per-invoice breakdown (used for the loading list and the delivery report)."""
+    rows = {}
+    for inv in invoices:
+        for ln in inv.line_ids:
+            key = f"cat:{ln.catalog_id.id}" if ln.catalog_id else ln.product_key
+            row = rows.get(key)
+            if row is None:
+                row = rows[key] = {
+                    "product_key": key,
+                    "product_code": ln.catalog_id.internal_code if ln.catalog_id else (ln.product_code or None),
+                    "ean": ln.catalog_id.ean if ln.catalog_id else None,
+                    "producer": ln.catalog_id.producer if ln.catalog_id else None,
+                    "product_name": ln.catalog_id.name if ln.catalog_id else ln.product_name,
+                    "uom": ln.uom or None,
+                    "quantity": 0.0,
+                    "delivered_qty": 0.0,
+                    "returned_qty": 0.0,
+                    "amount": 0.0,
+                    "invoices": [],
+                }
+            row["quantity"] += ln.quantity
+            row["delivered_qty"] += ln.delivered_qty
+            row["returned_qty"] += ln.return_qty
+            row["amount"] = round(row["amount"] + ln.amount, 2)
+            row["invoices"].append({
+                "invoice_id": inv.id,
+                "invoice_name": inv.name or inv.file_name,
+                "customer_name": inv.customer_name or None,
+                "quantity": ln.quantity,
+                "returned_qty": ln.return_qty,
+                "return_reason": ln.return_reason or None,
+                "delivery_note": ln.delivery_note or None,
+            })
+    result = sorted(rows.values(), key=lambda r: ((r["producer"] or "~").lower(), r["product_name"].lower()))
+    producers = {}
+    for r in result:
+        p = producers.setdefault(r["producer"] or "", {
+            "producer": r["producer"], "products": 0, "quantity": 0.0, "delivered_qty": 0.0, "returned_qty": 0.0,
+        })
+        p["products"] += 1
+        p["quantity"] += r["quantity"]
+        p["delivered_qty"] += r["delivered_qty"]
+        p["returned_qty"] += r["returned_qty"]
+    return result, sorted(producers.values(), key=lambda p: (p["producer"] or "~").lower())
 
 class VetoraApiController(http.Controller):
     """JSON API for Vetora clinic backend."""
@@ -1621,7 +1698,8 @@ class VetoraApiController(http.Controller):
         if vals_in.get("id") and not invoice:
             return _json_error("NOT_FOUND", "Invoice not found.", {"id": vals_in.get("id")}, http_status=404)
         vals = {}
-        for key in ("name", "supplier_name", "supplier_vat", "customer_name", "customer_vat", "invoice_date", "notes"):
+        for key in ("name", "supplier_name", "supplier_vat", "customer_name", "customer_vat",
+                    "customer_phone", "delivery_address", "invoice_date", "notes"):
             if key in vals_in:
                 vals[key] = (vals_in.get(key) or "").strip() or False
         if "location_id" in vals_in:
@@ -1837,4 +1915,187 @@ class VetoraApiController(http.Controller):
                 }
                 for p in products
             ],
+        })
+
+    # --- Delivery runs (daily loading + delivery tracking) ---
+
+    @http.route("/vetora/json/delivery_run/list", type="json", auth="user", methods=["POST"])
+    def delivery_run_list(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        domain = [("company_id", "=", env.company.id)]
+        if payload.get("date_from"):
+            domain.append(("date", ">=", payload["date_from"]))
+        if payload.get("date_to"):
+            domain.append(("date", "<=", payload["date_to"]))
+        runs = env["vet.delivery.run"].search(domain, limit=int(payload.get("limit") or 100))
+        return _json_ok({"runs": [_serialize_run(r) for r in runs]})
+
+    @http.route("/vetora/json/delivery_run/save", type="json", auth="user", methods=["POST"])
+    def delivery_run_save(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        vals_in = payload.get("run") or {}
+        Run = env["vet.delivery.run"]
+        vals = {}
+        for key in ("name", "driver", "vehicle", "notes"):
+            if key in vals_in:
+                vals[key] = (vals_in.get(key) or "").strip() or False
+        if vals_in.get("date"):
+            vals["date"] = vals_in["date"]
+        if vals_in.get("state") in ("planned", "loaded", "in_progress", "done"):
+            vals["state"] = vals_in["state"]
+        try:
+            if vals_in.get("id"):
+                run = Run.browse(int(vals_in["id"])).exists()
+                if not run:
+                    return _json_error("NOT_FOUND", "Run not found.", http_status=404)
+                run.write(vals)
+            else:
+                if not vals.get("name"):
+                    date_label = vals.get("date") or str(fields.Date.context_today(Run))
+                    vals["name"] = f"Cursa {date_label}"
+                run = Run.create(vals)
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok(_serialize_run(run))
+
+    @http.route("/vetora/json/delivery_run/get", type="json", auth="user", methods=["POST"])
+    def delivery_run_get(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        run = request.env["vet.delivery.run"].browse(int(payload.get("run_id") or 0)).exists()
+        if not run:
+            return _json_error("NOT_FOUND", "Run not found.", http_status=404)
+        data = _serialize_run(run)
+        data["invoices"] = [_serialize_supplier_invoice(inv, with_lines=True) for inv in run.invoice_ids.sorted("id")]
+        return _json_ok(data)
+
+    @http.route("/vetora/json/delivery_run/delete", type="json", auth="user", methods=["POST"])
+    def delivery_run_delete(self, **kwargs):
+        payload = {**_json_payload(), **kwargs}
+        run = request.env["vet.delivery.run"].browse(int(payload.get("run_id") or 0)).exists()
+        if not run:
+            return _json_error("NOT_FOUND", "Run not found.", http_status=404)
+        try:
+            run.invoice_ids.filtered(lambda i: i.state == "draft").unlink()
+            run.unlink()
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok({"deleted": True})
+
+    @http.route("/vetora/json/delivery_run/upload", type="json", auth="user", methods=["POST"])
+    def delivery_run_upload(self, **kwargs):
+        """Upload one invoice PDF into a run. Rejects an invoice already uploaded (same number + issuer)."""
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        run = env["vet.delivery.run"].browse(int(payload.get("run_id") or 0)).exists()
+        if not run:
+            return _json_error("NOT_FOUND", "Run not found.", http_status=404)
+        file_b64 = payload.get("file_base64") or ""
+        file_name = (payload.get("file_name") or "").strip() or "factura.pdf"
+        if not file_b64:
+            return _json_error("MISSING_FIELDS", "Field 'file_base64' is required.", {"fields": ["file_base64"]})
+        try:
+            file_bytes = base64.b64decode(file_b64.split(",", 1)[1] if file_b64.startswith("data:") else file_b64)
+        except (binascii.Error, ValueError):
+            return _json_error("INVALID_FILE", "File content is not valid base64.")
+        if len(file_bytes) > SUPPLIER_INVOICE_MAX_BYTES:
+            return _json_error("FILE_TOO_LARGE", "File is larger than 15 MB.")
+        try:
+            invoice = env["vet.supplier.invoice"].create_from_file(file_bytes, file_name, run_id=run.id)
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        dup = invoice._find_duplicates()[:1]
+        if dup:
+            where = dup.run_id.name if dup.run_id else "-"
+            name = invoice.name
+            invoice.unlink()
+            return _json_error(
+                "DUPLICATE_INVOICE",
+                f"Factura {name} a fost deja încărcată ({where}).",
+                {"invoice_id": dup.id, "run_id": dup.run_id.id if dup.run_id else None, "run_name": where},
+            )
+        return _json_ok(_serialize_supplier_invoice(invoice, with_lines=True))
+
+    @http.route("/vetora/json/delivery_run/remove_invoice", type="json", auth="user", methods=["POST"])
+    def delivery_run_remove_invoice(self, **kwargs):
+        """Remove an invoice from its run (deletes it if still a draft without delivery)."""
+        payload = {**_json_payload(), **kwargs}
+        invoice = _get_supplier_invoice(payload)
+        if not invoice:
+            return _json_error("NOT_FOUND", "Invoice not found.", http_status=404)
+        if invoice.delivery_state != "pending":
+            return _json_error("VALIDATION_ERROR", "Factura are deja livrarea înregistrată; resetați statusul întâi.")
+        try:
+            if invoice.state == "draft":
+                invoice.unlink()
+            else:
+                invoice.run_id = False
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok({"removed": True})
+
+    @http.route("/vetora/json/delivery/update", type="json", auth="user", methods=["POST"])
+    def delivery_update(self, **kwargs):
+        """Record the delivery result of an invoice.
+
+        payload: invoice_id, status (pending|delivered|partial|not_delivered), note,
+                 lines: [{id, return_qty, return_reason, delivery_note}]
+        """
+        payload = {**_json_payload(), **kwargs}
+        invoice = _get_supplier_invoice(payload)
+        if not invoice:
+            return _json_error("NOT_FOUND", "Invoice not found.", http_status=404)
+        try:
+            invoice.action_set_delivery(
+                payload.get("status") or "delivered",
+                note=payload.get("note") if "note" in payload else None,
+                lines=payload.get("lines") or None,
+            )
+        except ValidationError as e:
+            return _json_error("VALIDATION_ERROR", str(e))
+        return _json_ok(_serialize_supplier_invoice(invoice, with_lines=True))
+
+    @http.route("/vetora/json/delivery/summary", type="json", auth="user", methods=["POST"])
+    def delivery_summary(self, **kwargs):
+        """Loading list + delivery report for one run (run_id) or for a period (date_from/date_to).
+
+        Returns invoices (with delivery status), per-product totals (loaded/delivered/returned),
+        per-producer totals and status counters.
+        """
+        payload = {**_json_payload(), **kwargs}
+        env = request.env
+        Invoice = env["vet.supplier.invoice"]
+        run = None
+        if payload.get("run_id"):
+            run = env["vet.delivery.run"].browse(int(payload["run_id"])).exists()
+            if not run:
+                return _json_error("NOT_FOUND", "Run not found.", http_status=404)
+            invoices = run.invoice_ids.sorted("id")
+        else:
+            domain = [("company_id", "=", env.company.id), ("run_id", "!=", False)]
+            if payload.get("date_from"):
+                domain.append(("run_id.date", ">=", payload["date_from"]))
+            if payload.get("date_to"):
+                domain.append(("run_id.date", "<=", payload["date_to"]))
+            customer = (payload.get("customer") or "").strip()
+            if customer:
+                domain.append(("customer_name", "ilike", customer))
+            invoices = Invoice.search(domain, order="id")
+        products, by_producer = _aggregate_delivery_goods(invoices)
+        counts = {s: len(invoices.filtered(lambda i, s=s: i.delivery_state == s))
+                  for s in ("pending", "delivered", "partial", "not_delivered")}
+        return _json_ok({
+            "run": _serialize_run(run) if run else None,
+            "invoices": [_serialize_supplier_invoice(inv, with_lines=True) for inv in invoices],
+            "products": products,
+            "by_producer": by_producer,
+            "counts": counts,
+            "totals": {
+                "invoices": len(invoices),
+                "quantity": sum(p["quantity"] for p in products),
+                "delivered_qty": sum(p["delivered_qty"] for p in products),
+                "returned_qty": sum(p["returned_qty"] for p in products),
+                "amount": round(sum(invoices.mapped("amount_untaxed")), 2),
+            },
         })

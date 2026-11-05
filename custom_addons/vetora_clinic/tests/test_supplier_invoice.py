@@ -155,3 +155,53 @@ class TestSupplierInvoice(TransactionCase):
         inv.line_ids.unlink()
         with self.assertRaises(ValidationError):
             inv.action_confirm()
+
+
+class TestDeliveryRun(TransactionCase):
+    def setUp(self):
+        super().setUp()
+        self.run = self.env["vet.delivery.run"].create({"name": "Cursa test", "date": "2026-11-05"})
+        self.inv = self.env["vet.supplier.invoice"].create({
+            "name": "CTVETF 6043",
+            "supplier_name": "CITYVET PET & FARM SRL",
+            "customer_name": "CERI IMPEX SRL",
+            "invoice_date": "2026-11-03",
+            "run_id": self.run.id,
+            "line_ids": [
+                (0, 0, {"product_name": "Gosbi Lamb Mini 7kg", "quantity": 3, "price_unit": 190}),
+                (0, 0, {"product_name": "KITTIX beef", "quantity": 1, "price_unit": 30}),
+            ],
+        })
+
+    def test_delivered_and_not_delivered(self):
+        self.inv.action_set_delivery("delivered")
+        self.assertEqual(self.inv.delivery_state, "delivered")
+        self.assertTrue(self.inv.delivered_at)
+        self.assertEqual(self.inv.line_ids.mapped("delivered_qty"), [3.0, 1.0])
+        self.inv.action_set_delivery("not_delivered", note="Client închis")
+        self.assertEqual(self.inv.line_ids.mapped("delivered_qty"), [0.0, 0.0])
+        self.assertEqual(self.inv.delivery_note, "Client închis")
+        self.assertEqual(self.run.not_delivered_count, 1)
+
+    def test_partial_delivery(self):
+        lamb, kittix = self.inv.line_ids
+        self.inv.action_set_delivery("partial", lines=[
+            {"id": lamb.id, "return_qty": 1, "return_reason": "damaged", "delivery_note": "sac rupt"},
+        ])
+        self.assertEqual(self.inv.delivery_state, "partial")
+        self.assertEqual((lamb.delivered_qty, lamb.return_qty, lamb.return_reason), (2.0, 1.0, "damaged"))
+        self.assertEqual(kittix.delivered_qty, 1.0)
+        # Partial with nothing returned is a full delivery
+        self.inv.action_set_delivery("partial", lines=[{"id": lamb.id, "return_qty": 0}])
+        self.assertEqual(self.inv.delivery_state, "delivered")
+
+    def test_return_qty_bounds(self):
+        with self.assertRaises(ValidationError):
+            self.inv.line_ids[0].return_qty = 5
+
+    def test_duplicates_and_run_delete_guard(self):
+        dup = self.inv.copy({"run_id": False})
+        self.assertIn(self.inv, dup._find_duplicates())
+        self.inv.action_set_delivery("delivered")
+        with self.assertRaises(ValidationError):
+            self.run.unlink()

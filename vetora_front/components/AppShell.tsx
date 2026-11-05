@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/calendar", key: "nav.calendar" },
   { href: "/patients", key: "nav.patients" },
   { href: "/clients", key: "nav.clients" },
+  { href: "/deliveries", key: "nav.deliveries" },
   { href: "/goods", key: "nav.goods" },
   { href: "/settings", key: "nav.settings" },
 ];
@@ -23,7 +24,7 @@ export function AppShell({ children }: Props) {
   return (
     <div className="flex flex-col min-h-screen">
       <header
-        className="px-6 py-3 flex items-center justify-between"
+        className="px-6 py-3 flex flex-wrap gap-2 items-center justify-between"
         style={{
           background:
             "linear-gradient(90deg, #5c4acb 0%, #8b7cf6 40%, #b69cf6 100%)",
@@ -38,9 +39,9 @@ export function AppShell({ children }: Props) {
             MVP
           </span>
         </div>
-        <nav className="flex items-center gap-4 text-sm">
+        <nav className="flex flex-wrap items-center gap-4 text-sm">
           <div
-            className="flex items-center gap-1 px-1 py-1 rounded-full"
+            className="flex flex-wrap items-center gap-1 px-1 py-1 rounded-full"
             style={{ backgroundColor: "rgba(255, 253, 249, 0.15)" }}
           >
             {NAV_ITEMS.map((item) => {

@@ -1,6 +1,19 @@
-## Modul: Colectare centralizată marfă din facturi
+## Modul: Livrări + colectare centralizată marfă din facturi
 
-### Flux
+### Livrări zilnice (`/deliveries`) – fluxul principal
+1. **Cursă nouă** pentru ziua respectivă (dată, șofer, mașină, note).
+2. **Încarcă facturile zilei** (PDF, mai multe deodată). Din fiecare factură se extrag clientul,
+   adresa de livrare, telefonul și produsele. O factură deja încărcată (același nr. + emitent) este refuzată.
+3. **Listă încărcare** – totalul de încărcat din depozit pe produs, grupat pe producător,
+   cu defalcarea pe facturi/clienți. Se tipărește și se bifează la încărcare.
+4. **Evidența livrării** (pe fiecare factură, merge de pe telefon):
+   *Livrat integral* / *Parțial – retur* (cantitate returnată pe linie + motiv: refuzat, deteriorat,
+   lipsă la încărcare, produs greșit, altul + notă) / *Nelivrat*, plus notă de livrare. Se salvează ora.
+5. **Raport livrare** – facturile duse cu statusul lor, cantități încărcat / livrat / returnat pe produs,
+   lista retururilor; tipărire + CSV. **Raport perioadă** (`/deliveries/report`) – același raport pe mai multe zile.
+
+
+### Catalog și registru (meniul „Marfă”)
 1. **Catalog produse** (`/goods/catalog`) – se importă lista Excel a distribuitorului
    (coloane: `CATEGORIE`, `Cod INTERN`, `COD EAN`, `Denumire`, `Pret`, `TVA`, `COD VAMAL`).
    Re-importul actualizează produsele după `Cod INTERN`. `CATEGORIE` = producător.
@@ -25,5 +38,9 @@
 - `custom_addons/vetora_clinic/tools/invoice_extract.py` – extragere + parsare (Python pur, testabil separat).
 - `models/vet_supplier_invoice.py` – `vet.supplier.invoice`, `vet.supplier.invoice.line`.
 - `models/vet_goods_product.py` – `vet.goods.product` (catalog, import xlsx, potrivire).
+- `models/vet_delivery_run.py` – `vet.delivery.run` (cursa); câmpurile de livrare sunt pe factură
+  (`delivery_state`, `delivery_note`, `delivered_at`) și pe linie (`return_qty`, `return_reason`, `delivered_qty`).
+- API livrări: `/vetora/json/delivery_run/{list,save,get,delete,upload,remove_invoice}`,
+  `/vetora/json/delivery/{update,summary}`.
 - API: `/vetora/json/supplier_invoice/{upload,list,get,save,action,file}`,
   `/vetora/json/goods_registry`, `/vetora/json/goods_catalog/{import,list}`.

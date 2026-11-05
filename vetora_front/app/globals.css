@@ -385,3 +385,28 @@ td {
 .disabled\:bg-slate-50:disabled { background-color: #f8fafc; }
 .disabled\:text-slate-600:disabled { color: #475569; }
 .text-\[\#5c4acb\] { color: #5c4acb; }
+
+/* --- Deliveries --- */
+.bg-red-50 { background-color: #fef2f2; }
+.inline-block { display: inline-block; }
+.print-only { display: none; }
+@media print {
+  header, .no-print { display: none !important; }
+  .print-only { display: block; }
+  body { background: #fff; }
+  main { max-width: none; padding: 0; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+}
+.bg-\[\#5c4acb\]:hover { background-color: #5c4acb; }
+.bg-emerald-50:hover { background-color: #d1fae5; }
+.bg-amber-50:hover { background-color: #fef3c7; }
+.bg-red-50:hover { background-color: #fee2e2; }
+.link-button { border: none; background: none; padding: 0; border-radius: 0; }
+.link-button:hover { background: none; text-decoration: underline; }
+textarea { box-sizing: border-box; }
+input, select, textarea { box-sizing: border-box; max-width: 100%; }
+@media (max-width: 640px) {
+  header { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  main { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+}

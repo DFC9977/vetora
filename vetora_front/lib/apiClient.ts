@@ -17,6 +17,11 @@ import {
   SupplierInvoiceLine,
   GoodsRegistryData,
   GoodsCatalogProduct,
+  DeliveryRun,
+  DeliverySummary,
+  DeliveryState,
+  ReturnReason,
+  RunState,
 } from "./types";
 
 // Always call the local Next.js API proxy, which forwards to Odoo.
@@ -353,6 +358,46 @@ export const api = {
       "/vetora/json/goods_catalog/import",
       payload,
     );
+  },
+
+  // Delivery runs
+  listDeliveryRuns(payload: { date_from?: string; date_to?: string; limit?: number }) {
+    return requestJson<{ runs: DeliveryRun[] }>("/vetora/json/delivery_run/list", payload);
+  },
+
+  saveDeliveryRun(payload: {
+    run: { id?: number; name?: string; date?: string; driver?: string; vehicle?: string; notes?: string; state?: RunState };
+  }) {
+    return requestJson<DeliveryRun>("/vetora/json/delivery_run/save", payload);
+  },
+
+  getDeliveryRun(payload: { run_id: number }) {
+    return requestJson<DeliveryRun>("/vetora/json/delivery_run/get", payload);
+  },
+
+  deleteDeliveryRun(payload: { run_id: number }) {
+    return requestJson<{ deleted: boolean }>("/vetora/json/delivery_run/delete", payload);
+  },
+
+  uploadRunInvoice(payload: { run_id: number; file_base64: string; file_name: string }) {
+    return requestJson<SupplierInvoice>("/vetora/json/delivery_run/upload", payload);
+  },
+
+  removeRunInvoice(payload: { invoice_id: number }) {
+    return requestJson<{ removed: boolean }>("/vetora/json/delivery_run/remove_invoice", payload);
+  },
+
+  updateDelivery(payload: {
+    invoice_id: number;
+    status: DeliveryState;
+    note?: string | null;
+    lines?: { id: number; return_qty?: number; return_reason?: ReturnReason | null; delivery_note?: string | null }[];
+  }) {
+    return requestJson<SupplierInvoice>("/vetora/json/delivery/update", payload);
+  },
+
+  deliverySummary(payload: { run_id?: number; date_from?: string; date_to?: string; customer?: string }) {
+    return requestJson<DeliverySummary>("/vetora/json/delivery/summary", payload);
   },
 
   listGoodsCatalog(payload: { query?: string; limit?: number }) {
